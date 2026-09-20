@@ -19,7 +19,7 @@
       <div>
         <h1>Your bus pass, without the queue.</h1>
         <p class="lede">Apply online, follow your application until it's approved, then ride with a QR code on your phone.</p>
-        <div class="hero-cta">
+        <div class="hero-cta" id="heroCta">
           <a class="btn btn-accent" href="register.html">Apply for a pass</a>
           <a class="btn btn-outline" href="login.html">Log in</a>
         </div>
@@ -95,6 +95,15 @@
 <script>
 (function () {
   initNavbar('home');
+
+  /* Someone is already logged in: replace "Log in" with a way back into the app */
+  const me = getCurrentUser();
+  if (me) {
+    document.getElementById('heroCta').innerHTML = me.role === 'admin'
+      ? '<a class="btn btn-accent" href="admin.html">Open admin panel</a>'
+      : '<a class="btn btn-accent" href="dashboard.html">Go to my dashboard</a>' +
+        '<a class="btn btn-outline" href="apply.html">Apply for a pass</a>';
+  }
 
   /* Pass types: how long each one lasts */
   document.getElementById('typeList').innerHTML = Object.keys(PASS_TYPES).map(function (key) {

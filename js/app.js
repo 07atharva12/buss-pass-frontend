@@ -418,6 +418,7 @@ function setBusy(btn, busy, label) {
    NAVBAR (rendered by JS so every page shares one copy)
    ========================================================= */
 const USER_LINKS = [
+  { page: 'home', href: 'index.html', label: 'Home' },
   { page: 'dashboard', href: 'dashboard.html', label: 'Dashboard' },
   { page: 'apply', href: 'apply.html', label: 'Apply for pass' },
   { page: 'track', href: 'track.html', label: 'Track status' },
@@ -519,9 +520,11 @@ function initNavbar(activePage) {
         '</div></div>';
     } else {
       const isAdmin = user.role === 'admin';
-      const links = isAdmin ? [{ page: 'admin', href: 'admin.html', label: 'Applications' }] : USER_LINKS;
+      const links = isAdmin
+        ? [{ page: 'home', href: 'index.html', label: 'Home' }, { page: 'admin', href: 'admin.html', label: 'Applications' }]
+        : USER_LINKS;
       host.innerHTML = '<div class="topbar-inner">' +
-        brandHTML(homeFor(user)) + (isAdmin ? '<span class="admin-tag">Admin</span>' : '') +
+        brandHTML('index.html') + (isAdmin ? '<span class="admin-tag">Admin</span>' : '') +
         '<nav class="topnav" aria-label="Main">' +
           links.map(function (l) {
             return '<a class="nav-link' + (l.page === activePage ? ' active' : '') + '" href="' + l.href + '"' +
