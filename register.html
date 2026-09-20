@@ -15,7 +15,7 @@
   <aside class="auth-side on-dark">
     <a class="brand" href="index.html"><span class="brand-mark"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="3" width="16" height="15" rx="3"/><path d="M4 11h16"/><circle cx="8" cy="14.5" r=".8"/><circle cx="16" cy="14.5" r=".8"/><path d="M6.5 18v2.5M17.5 18v2.5"/></svg></span><span>Smart Bus Pass</span></a>
 
-    <div class="board" role="img" aria-label="Bus destination board: route 1 to Dadar">
+    <div class="board" role="img" aria-label="Bus destination board">
       <div class="board-row">
         <div class="board-no">1</div>
         <div>
@@ -35,7 +35,7 @@
 
       <div class="notice" id="addBanner" hidden></div>
 
-      <form id="registerForm">
+      <form id="registerForm" novalidate>
         <div class="field">
           <label for="name">Full name</label>
           <input type="text" id="name" placeholder="Your full name" autocomplete="name" required>
@@ -46,14 +46,14 @@
         </div>
         <div class="field">
           <label for="phone">Phone number</label>
-          <input type="tel" id="phone" pattern="[0-9]{10}" placeholder="10-digit mobile number" autocomplete="tel" required>
+          <input type="tel" id="phone" inputmode="numeric" maxlength="10" placeholder="10-digit mobile number" autocomplete="tel" required>
         </div>
         <div class="field">
           <label for="password">Password</label>
-          <input type="password" id="password" placeholder="At least 6 characters" minlength="6" autocomplete="new-password" required>
+          <input type="password" id="password" placeholder="At least 6 characters" autocomplete="new-password" required>
           <div class="error-text" id="regError" role="alert"></div>
         </div>
-        <button type="submit" class="btn btn-primary btn-block">Create account</button>
+        <button type="submit" class="btn btn-primary btn-block" id="submitBtn">Create account</button>
       </form>
 
       <p class="switch">Already registered? <a href="login.html" id="loginLink">Log in</a></p>
@@ -75,27 +75,35 @@
     document.getElementById('loginLink').href = 'login.html?add=1';
   }
 
-  document.getElementById('registerForm').addEventListener('submit', function (e) {
+  document.getElementById('registerForm').addEventListener('submit', async function (e) {
     e.preventDefault();
     const name = document.getElementById('name').value.trim();
     const email = document.getElementById('email').value.trim();
     const phone = document.getElementById('phone').value.trim();
     const password = document.getElementById('password').value;
     const errorBox = document.getElementById('regError');
+    const btn = document.getElementById('submitBtn');
+    errorBox.style.display = 'none';
 
-    const result = registerUser({ name: name, email: email, phone: phone, password: password });
-    if (!result.ok) {
-      errorBox.textContent = result.message;
+    function fail(message) {
+      setBusy(btn, false);
+      errorBox.textContent = message;
       errorBox.style.display = 'block';
-      return;
     }
+
+    // Same rules the server checks, so people get the message straight away
+    if (name.length < 2) return fail('Name must be at least 2 characters.');
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return fail('Enter a valid email address.');
+    if (!/^\d{10}$/.test(phone)) return fail('Phone number must be exactly 10 digits.');
+    if (password.length < 6) return fail('Password must be at least 6 characters.');
+
+    setBusy(btn, true, 'Creating account...');
+    const result = await registerUser({ name: name, email: email, phone: phone, password: password });
+    if (!result.ok) return fail(result.message);
+
     // Sign the new account in. If someone was already signed in, they stay signed in too.
-    const login = loginUser(email, password);
-    if (!login.ok) {
-      errorBox.textContent = login.message;
-      errorBox.style.display = 'block';
-      return;
-    }
+    const login = await loginUser(email, password);
+    if (!login.ok) return fail(login.message);
     if (existing) flash('Account created. You are now using ' + login.user.name + '.');
     window.location.href = homeFor(login.user);
   });

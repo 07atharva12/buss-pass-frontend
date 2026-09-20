@@ -16,19 +16,15 @@
 <main class="wrap page">
   <div class="page-head">
     <h1>Apply for a bus pass</h1>
-    <p>Fill in the details and submit. An admin will review your application.</p>
+    <p>Choose your route and pass type. An admin will review your application.</p>
   </div>
 
   <div class="apply-grid">
-    <form class="card" id="applyForm">
-      <div class="field">
-        <label for="fullName">Full name</label>
-        <input type="text" id="fullName" autocomplete="name" required>
-      </div>
-
+    <form class="card" id="applyForm" novalidate>
       <div class="field">
         <label for="route">Route</label>
-        <select id="route" required></select>
+        <select id="route" required><option value="">Loading routes...</option></select>
+        <div class="form-hint" id="routeHint"></div>
       </div>
 
       <div class="field">
@@ -36,18 +32,8 @@
         <div class="tiles" id="passTiles" role="radiogroup" aria-labelledby="typeLabel"></div>
       </div>
 
-      <div class="field">
-        <label for="pickup">Pickup point</label>
-        <input type="text" id="pickup" placeholder="e.g. Main Bus Stand" required>
-      </div>
-
-      <div class="field">
-        <label for="idProof">ID proof number (Aadhar or college ID)</label>
-        <input type="text" id="idProof" placeholder="Used only to verify your identity" required>
-        <div class="form-hint">It is not shown to anyone except the reviewing admin.</div>
-      </div>
-
-      <button type="submit" class="btn btn-primary btn-block">Submit application</button>
+      <div class="error-text" id="applyError" role="alert" style="margin-bottom:14px;"></div>
+      <button type="submit" class="btn btn-primary btn-block" id="submitBtn">Submit application</button>
     </form>
 
     <aside class="summary on-dark" aria-live="polite">
@@ -60,7 +46,7 @@
         <div><dt>Pass type</dt><dd id="sumType">Not chosen</dd></div>
         <div><dt>Valid for</dt><dd id="sumDays">-</dd></div>
       </dl>
-      <div class="total"><span>Amount payable</span><b id="amountPreview">₹0</b></div>
+      <div class="total"><span>Route fare</span><b id="amountPreview">₹0</b></div>
     </aside>
   </div>
 </main>
@@ -72,54 +58,80 @@
   if (!user) return;
   initNavbar('apply');
 
-  document.getElementById('fullName').value = user.name;
-
-  /* Route dropdown + pass tiles are built from ROUTES and PASS_TYPES in js/app.js */
   const routeSel = document.getElementById('route');
-  routeSel.innerHTML = '<option value="">Choose a route</option>' +
-    ROUTES.map(function (r) { return '<option value="' + esc(routeValue(r)) + '">' + esc(routeValue(r)) + '</option>'; }).join('');
+  const btn = document.getElementById('submitBtn');
+  const errorBox = document.getElementById('applyError');
+  let routes = [];
 
-  document.getElementById('passTiles').innerHTML = Object.keys(PASS_TYPES).map(function (name, i) {
-    const p = PASS_TYPES[name];
-    return '<label class="tile"><input type="radio" name="passType" value="' + name + '"' + (i === 0 ? ' required' : '') + '>' +
-      '<span class="tile-body"><span class="tile-name">' + name + '</span>' +
-      '<span class="tile-price">₹' + p.price.toLocaleString('en-IN') + '</span>' +
-      '<span class="tile-sub">' + p.days + ' days</span></span></label>';
+  /* Pass type tiles come from PASS_TYPES in js/app.js */
+  document.getElementById('passTiles').innerHTML = Object.keys(PASS_TYPES).map(function (key, i) {
+    const p = PASS_TYPES[key];
+    return '<label class="tile"><input type="radio" name="passType" value="' + key + '"' + (i === 0 ? ' required' : '') + '>' +
+      '<span class="tile-body"><span class="tile-name">' + p.label + '</span>' +
+      '<span class="tile-price">' + p.days + ' days</span>' +
+      '<span class="tile-sub">from approval</span></span></label>';
   }).join('');
 
   function chosenType() {
     const el = document.querySelector('input[name="passType"]:checked');
     return el ? el.value : '';
   }
+  function chosenRoute() {
+    return routes.find(function (r) { return String(r.id) === routeSel.value; }) || null;
+  }
 
   function updateSummary() {
-    const route = routeSel.value;
+    const r = chosenRoute();
     const type = chosenType();
     const plate = document.getElementById('sumPlate');
-    plate.textContent = route ? routeNo(route) : '--';
-    plate.style.opacity = route ? '1' : '.35';
-    document.getElementById('sumRoute').textContent = route ? routeName(route) : 'Choose a route';
-    document.getElementById('sumType').textContent = type || 'Not chosen';
+    plate.textContent = r ? r.route_number : '--';
+    plate.style.opacity = r ? '1' : '.35';
+    document.getElementById('sumRoute').textContent = r ? routeName(r) : 'Choose a route';
+    document.getElementById('sumType').textContent = type ? PASS_TYPES[type].label : 'Not chosen';
     document.getElementById('sumDays').textContent = type ? PASS_TYPES[type].days + ' days from approval' : '-';
-    document.getElementById('amountPreview').textContent = '₹' + (type ? PASS_TYPES[type].price.toLocaleString('en-IN') : 0);
+    document.getElementById('amountPreview').textContent = money(r ? r.fare : 0);
   }
   routeSel.addEventListener('change', updateSummary);
   document.getElementById('passTiles').addEventListener('change', updateSummary);
 
-  document.getElementById('applyForm').addEventListener('submit', function (e) {
+  async function loadRoutes() {
+    try {
+      routes = await fetchRoutes();
+      if (!routes.length) {
+        routeSel.innerHTML = '<option value="">No routes available yet</option>';
+        document.getElementById('routeHint').textContent = 'An admin needs to add routes before you can apply.';
+        btn.disabled = true;
+        return;
+      }
+      routeSel.innerHTML = '<option value="">Choose a route</option>' +
+        routes.map(function (r) { return '<option value="' + r.id + '">' + esc(routeLabel(r)) + '</option>'; }).join('');
+    } catch (e) {
+      routeSel.innerHTML = '<option value="">Could not load routes</option>';
+      document.getElementById('routeHint').textContent = e.message;
+      btn.disabled = true;
+    }
+  }
+  loadRoutes();
+
+  document.getElementById('applyForm').addEventListener('submit', async function (e) {
     e.preventDefault();
-    const passType = chosenType();
-    const app = submitApplication({
-      userEmail: user.email,
-      name: document.getElementById('fullName').value.trim(),
-      route: routeSel.value,
-      pickup: document.getElementById('pickup').value.trim(),
-      idProof: document.getElementById('idProof').value.trim(),
-      passType: passType,
-      amount: PASS_TYPES[passType].price
-    });
-    showToast('Application submitted. Your ID is ' + app.id + '.');
-    setTimeout(function () { window.location.href = 'track.html'; }, 1000);
+    errorBox.style.display = 'none';
+    const type = chosenType();
+    if (!routeSel.value) { errorBox.textContent = 'Choose a route.'; errorBox.style.display = 'block'; return; }
+    if (!type) { errorBox.textContent = 'Choose a pass type.'; errorBox.style.display = 'block'; return; }
+
+    setBusy(btn, true, 'Submitting...');
+    try {
+      const res = await applyForPass(routeSel.value, type);
+      const id = 'BP-' + String(res.application.id).padStart(4, '0');
+      showToast('Application submitted. Your ID is ' + id + '.');
+      setTimeout(function () { window.location.href = 'track.html'; }, 1000);
+    } catch (err) {
+      setBusy(btn, false);
+      if (err.silent) return;
+      errorBox.textContent = err.message;      // e.g. "You already have a pending application for this route."
+      errorBox.style.display = 'block';
+    }
   });
 })();
 </script>

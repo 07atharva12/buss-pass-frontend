@@ -1,74 +1,28 @@
-const API_BASE = 'http://localhost:5000/api';   // your backend URL
-
-async function api(path, { method = 'GET', body } = {}) {
-  const token = getActiveToken();               // see step 3
-  const res = await fetch(API_BASE + path, {
-    method,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: 'Bearer ' + token } : {})
-    },
-    body: body ? JSON.stringify(body) : undefined
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.message || 'Something went wrong');
-  return data;
-}
 /* =========================================================
-   Smart Bus Pass - Frontend Logic
-   Uses localStorage as a mock database so the whole demo
-   works without a real backend. Replace the DB helpers with
-   real API (fetch) calls later if you add a backend.
+   Smart Bus Pass - Frontend Logic (connected to the Flask API)
+
+   Backend:  https://bus-pass-system-698m.onrender.com
 
    MULTIPLE ACCOUNTS
-   - bpms_sessions      = list of emails signed in on this browser
-   - bpms_current_user  = the email that is currently active
-   Every page reads the active account, so switching accounts
-   (top bar > your name) instantly changes whose passes,
-   notifications and applications you see.
+   Every account that logs in on this browser is saved with its own
+   login token:   bpms_accounts = [{ token, user }, ...]
+   The account currently in use is saved as its user id:  bpms_active
+   api() always sends the ACTIVE account's token, so switching account
+   (top bar > your name) changes whose data every page loads.
    ========================================================= */
 
-const DB_KEYS = {
-  USERS: 'bpms_users',
-  APPLICATIONS: 'bpms_applications',
-  CURRENT_USER: 'bpms_current_user',
-  SESSIONS: 'bpms_sessions',
-  NOTIFICATIONS: 'bpms_notifications'
-};
+const API_BASE = 'https://bus-pass-system-698m.onrender.com/api';
 
+const STORE = { ACCOUNTS: 'bpms_accounts', ACTIVE: 'bpms_active' };
 const MAX_ACCOUNTS = 5;
 
-/* Single source of truth for routes and fares */
-const ROUTES = [
-  { no: '1',  from: 'Andheri',     to: 'Dadar' },
-  { no: '5',  from: 'Borivali',    to: 'Churchgate' },
-  { no: '12', from: 'City Center', to: 'Tech Park' },
-  { no: '20', from: 'Thane',       to: 'CST' }
-];
+/* The backend stores only the pass type, so how long a pass lasts is
+   worked out here from the approval date. */
 const PASS_TYPES = {
-  Monthly:   { price: 600,  days: 30 },
-  Quarterly: { price: 1600, days: 90 },
-  Yearly:    { price: 5500, days: 365 }
+  monthly:   { label: 'Monthly',   days: 30 },
+  quarterly: { label: 'Quarterly', days: 90 },
+  yearly:    { label: 'Yearly',    days: 365 }
 };
-
-function routeValue(r) { return `Route ${r.no} - ${r.from} to ${r.to}`; }
-function routeNo(routeStr) {
-  const m = /^Route\s+(\S+)/i.exec(routeStr || '');
-  return m ? m[1] : '-';
-}
-function routeName(routeStr) {
-  const i = (routeStr || '').indexOf(' - ');
-  return i >= 0 ? routeStr.slice(i + 3) : (routeStr || '');
-}
-
-/* ---------- Low level storage helpers ---------- */
-function getData(key) {
-  try { return JSON.parse(localStorage.getItem(key) || '[]'); }
-  catch (e) { return []; }
-}
-function setData(key, value) {
-  localStorage.setItem(key, JSON.stringify(value));
-}
 
 /* ---------- Small helpers ---------- */
 function esc(s) {
@@ -76,29 +30,37 @@ function esc(s) {
     { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
   ));
 }
-function daysAgo(n) {
-  const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString();
+function plural(n, word) { return n + ' ' + word + (n === 1 ? '' : 's'); }
+function cap(s) { s = String(s || ''); return s.charAt(0).toUpperCase() + s.slice(1); }
+function money(n) { return '₹' + Number(n || 0).toLocaleString('en-IN'); }
+
+/* The API sends UTC times without a "Z" (e.g. 2026-09-20T10:00:00.123456).
+   Without the Z the browser would read them as local time, so add it. */
+function parseDate(v) {
+  if (!v) return null;
+  if (v instanceof Date) return v;
+  let s = String(v).replace(/(\.\d{3})\d+/, '$1');
+  if (!/(Z|[+-]\d{2}:?\d{2})$/.test(s)) s += 'Z';
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? null : d;
 }
-function daysFromNow(n) {
-  const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString();
-}
-function formatDate(iso) {
-  if (!iso) return '-';
-  const d = new Date(iso);
+function formatDate(v) {
+  const d = parseDate(v);
+  if (!d) return '-';
   return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 }
-function daysLeft(iso) {
-  if (!iso) return 0;
-  return Math.max(0, Math.ceil((new Date(iso) - new Date()) / 86400000));
+function daysLeft(date) {
+  const d = parseDate(date);
+  if (!d) return 0;
+  return Math.max(0, Math.ceil((d.getTime() - Date.now()) / 86400000));
 }
 function validityPercent(app) {
-  if (!app.approvedDate || !app.expiryDate) return 0;
-  const total = new Date(app.expiryDate) - new Date(app.approvedDate);
-  const left = new Date(app.expiryDate) - new Date();
+  const start = parseDate(app.reviewed_on), end = parseDate(app.expiry);
+  if (!start || !end) return 0;
+  const total = end - start, left = end - Date.now();
   if (total <= 0) return 0;
   return Math.max(0, Math.min(100, Math.round((left / total) * 100)));
 }
-function plural(n, word) { return n + ' ' + word + (n === 1 ? '' : 's'); }
 
 /* ---------- Icons (inline SVG, inherit text colour) ---------- */
 const ICONS = {
@@ -137,141 +99,179 @@ function initials(name) {
 function avatar(user, size) {
   size = size || 32;
   return '<span class="avatar" style="width:' + size + 'px;height:' + size + 'px;background:' +
-    avatarColor(user.email) + ';font-size:' + Math.round(size * 0.4) + 'px">' + esc(initials(user.name)) + '</span>';
+    avatarColor(user.email || '') + ';font-size:' + Math.round(size * 0.4) + 'px">' + esc(initials(user.name)) + '</span>';
 }
 
-/* ---------- Seed demo data on first run ---------- */
-function seedDatabase() {
-  if (!localStorage.getItem(DB_KEYS.USERS)) {
-    setData(DB_KEYS.USERS, [
-      { name: 'Admin User', email: 'admin@bpms.com', phone: '9999999999', password: 'admin123', role: 'admin' },
-      { name: 'Rahul Sharma', email: 'rahul@example.com', phone: '9876543210', password: 'pass123', role: 'user' }
-    ]);
+/* =========================================================
+   TALKING TO THE BACKEND
+   ========================================================= */
+
+/* Render's free servers sleep when idle, so the first request can take
+   up to a minute. Show a notice instead of a frozen page. */
+let slowRequests = 0;
+function setWakeNotice(show) {
+  let el = document.getElementById('wakeNotice');
+  if (show && !el) {
+    el = document.createElement('div');
+    el.id = 'wakeNotice';
+    el.className = 'wake';
+    el.setAttribute('role', 'status');
+    el.textContent = 'The server is waking up. This can take up to a minute, please wait.';
+    document.body.appendChild(el);
+  } else if (!show && el) {
+    el.remove();
   }
-  if (!localStorage.getItem(DB_KEYS.APPLICATIONS)) {
-    setData(DB_KEYS.APPLICATIONS, [
-      {
-        id: 'BP-1001',
-        userEmail: 'rahul@example.com',
-        name: 'Rahul Sharma',
-        route: 'Route 12 - City Center to Tech Park',
-        passType: 'Monthly',
-        status: 'approved',
-        appliedDate: daysAgo(20),
-        approvedDate: daysAgo(18),
-        expiryDate: daysFromNow(10),
-        amount: 600
-      }
-    ]);
-  }
-  if (!localStorage.getItem(DB_KEYS.NOTIFICATIONS)) {
-    setData(DB_KEYS.NOTIFICATIONS, [
-      {
-        id: 'N-1',
-        userEmail: 'rahul@example.com',
-        title: 'Pass approved',
-        message: 'Your Monthly pass for Route 12 has been approved.',
-        date: daysAgo(18),
-        read: false
-      }
-    ]);
+}
+
+function errorMessage(d) {
+  if (!d) return '';
+  if (Array.isArray(d.errors) && d.errors.length) return d.errors.join(' ');
+  return d.message || d.msg || '';
+}
+
+/* Every request goes through here. Options: { method, body, auth:false } */
+async function api(path, opts) {
+  opts = opts || {};
+  const token = opts.auth === false ? null : getActiveToken();
+
+  let slow = false;
+  const timer = setTimeout(function () { slow = true; slowRequests++; setWakeNotice(true); }, 3500);
+
+  try {
+    let res;
+    try {
+      res = await fetch(API_BASE + path, {
+        method: opts.method || 'GET',
+        headers: Object.assign(
+          { 'Content-Type': 'application/json' },
+          token ? { Authorization: 'Bearer ' + token } : {}
+        ),
+        body: opts.body ? JSON.stringify(opts.body) : undefined
+      });
+    } catch (netErr) {
+      console.error('Request failed:', netErr);
+      throw new Error('Cannot reach the server. Check your internet connection and try again.');
+    }
+
+    let data = {};
+    try { data = await res.json(); } catch (e) { /* not JSON */ }
+
+    // Login token missing, expired or invalid
+    if (token && (res.status === 401 || (res.status === 422 && data.msg))) {
+      return sessionExpired(token);
+    }
+    if (!res.ok || data.success === false) {
+      throw new Error(errorMessage(data) || 'Something went wrong (' + res.status + ').');
+    }
+    return data;
+  } finally {
+    clearTimeout(timer);
+    if (slow) { slowRequests--; if (slowRequests <= 0) setWakeNotice(false); }
   }
 }
 
 /* =========================================================
    AUTH + MULTI-ACCOUNT
    ========================================================= */
-function publicUser(u) {
-  if (!u) return null;
-  const copy = Object.assign({}, u);
-  delete copy.password;
-  return copy;
-}
-function homeFor(user) {
-  return user && user.role === 'admin' ? 'admin.html' : 'dashboard.html';
-}
-
-function getSessionEmails() {
-  const users = getData(DB_KEYS.USERS);
-  const emails = getData(DB_KEYS.SESSIONS);
-  return emails.filter(e => users.some(u => u.email === e));
-}
-function setActiveAccount(email) {
-  const sessions = getSessionEmails();
-  if (!sessions.includes(email)) sessions.push(email);
-  setData(DB_KEYS.SESSIONS, sessions);
-  localStorage.setItem(DB_KEYS.CURRENT_USER, JSON.stringify(email));
-}
-function getSignedInAccounts() {
-  const users = getData(DB_KEYS.USERS);
-  return getSessionEmails()
-    .map(e => users.find(u => u.email === e))
-    .filter(Boolean)
-    .map(publicUser);
-}
-
-function registerUser(user) {
-  const users = getData(DB_KEYS.USERS);
-  if (users.find(u => u.email === user.email)) {
-    return { ok: false, message: 'An account with this email already exists. Log in instead.' };
-  }
-  users.push(Object.assign({}, user, { role: 'user' }));
-  setData(DB_KEYS.USERS, users);
-  return { ok: true };
-}
-
-function loginUser(email, password) {
-  const users = getData(DB_KEYS.USERS);
-  const user = users.find(u => u.email === email && u.password === password);
-  if (!user) return { ok: false, message: 'Email or password is incorrect. Check both and try again.' };
-  const sessions = getSessionEmails();
-  if (!sessions.includes(email) && sessions.length >= MAX_ACCOUNTS) {
-    return { ok: false, message: 'You can be signed in to ' + MAX_ACCOUNTS + ' accounts at once. Log out of one first.' };
-  }
-  setActiveAccount(email);
-  return { ok: true, user: publicUser(user) };
-}
-
-function getCurrentUser() {
-  const raw = localStorage.getItem(DB_KEYS.CURRENT_USER);
-  if (!raw) return null;
-  let email = null;
+function getAccounts() {
   try {
-    const parsed = JSON.parse(raw);
-    email = (parsed && typeof parsed === 'object') ? parsed.email : parsed;   // old builds stored the whole user object
-  } catch (e) { email = raw; }
-  const user = getData(DB_KEYS.USERS).find(u => u.email === email);
-  return publicUser(user);
+    const list = JSON.parse(localStorage.getItem(STORE.ACCOUNTS) || '[]');
+    return Array.isArray(list) ? list : [];
+  } catch (e) { return []; }
+}
+function saveAccounts(list) { localStorage.setItem(STORE.ACCOUNTS, JSON.stringify(list)); }
+function getActiveId() { return Number(localStorage.getItem(STORE.ACTIVE)) || null; }
+function getActiveAccount() {
+  const id = getActiveId();
+  return getAccounts().find(a => a.user.id === id) || null;
+}
+function getCurrentUser() { const a = getActiveAccount(); return a ? a.user : null; }
+function getActiveToken() { const a = getActiveAccount(); return a ? a.token : null; }
+function getSignedInAccounts() { return getAccounts().map(a => a.user); }
+function homeFor(user) { return user && user.role === 'admin' ? 'admin.html' : 'dashboard.html'; }
+
+function addAccount(token, user) {
+  const list = getAccounts().filter(a => a.user.id !== user.id);
+  list.push({ token: token, user: user });
+  saveAccounts(list);
+  localStorage.setItem(STORE.ACTIVE, String(user.id));
 }
 
-function switchAccount(email) {
-  if (!getSessionEmails().includes(email)) return;
-  setActiveAccount(email);
-  const user = getCurrentUser();
-  window.location.href = homeFor(user);
+async function registerUser(details) {
+  try {
+    await api('/auth/register', { method: 'POST', auth: false, body: details });
+    return { ok: true };
+  } catch (e) { return { ok: false, message: e.message }; }
 }
 
-/* Log out of the ACTIVE account only. If other accounts are still signed in,
-   fall back to one of them instead of dropping the person at the login page. */
+async function loginUser(email, password) {
+  try {
+    const data = await api('/auth/login', { method: 'POST', auth: false, body: { email: email, password: password } });
+    const token = data.access_token || data.token;
+    const user = data.user;
+    if (!token || !user) return { ok: false, message: 'The server sent an unexpected reply. Try again.' };
+    const already = getAccounts().some(a => a.user.id === user.id);
+    if (!already && getAccounts().length >= MAX_ACCOUNTS) {
+      return { ok: false, message: 'You can be signed in to ' + MAX_ACCOUNTS + ' accounts at once. Log out of one first.' };
+    }
+    addAccount(token, user);
+    return { ok: true, user: user };
+  } catch (e) { return { ok: false, message: e.message }; }
+}
+
+function switchAccount(userId) {
+  const account = getAccounts().find(a => a.user.id === Number(userId));
+  if (!account) return;
+  localStorage.setItem(STORE.ACTIVE, String(account.user.id));
+  window.location.href = homeFor(account.user);
+}
+
+/* Log out of the ACTIVE account only; fall back to another signed-in one. */
 function logoutUser() {
   const current = getCurrentUser();
-  const remaining = getSessionEmails().filter(e => !current || e !== current.email);
-  setData(DB_KEYS.SESSIONS, remaining);
+  const remaining = getAccounts().filter(a => !current || a.user.id !== current.id);
+  saveAccounts(remaining);
   if (remaining.length) {
-    const nextEmail = remaining[remaining.length - 1];
-    localStorage.setItem(DB_KEYS.CURRENT_USER, JSON.stringify(nextEmail));
-    const next = getCurrentUser();
-    flash('Logged out of ' + (current ? current.name : 'account') + '. Now using ' + next.name + '.');
-    window.location.href = homeFor(next);
+    const next = remaining[remaining.length - 1];
+    localStorage.setItem(STORE.ACTIVE, String(next.user.id));
+    flash('Logged out of ' + (current ? current.name : 'account') + '. Now using ' + next.user.name + '.');
+    window.location.href = homeFor(next.user);
   } else {
-    localStorage.removeItem(DB_KEYS.CURRENT_USER);
+    localStorage.removeItem(STORE.ACTIVE);
     window.location.href = 'login.html';
   }
 }
 function logoutAllAccounts() {
-  localStorage.removeItem(DB_KEYS.SESSIONS);
-  localStorage.removeItem(DB_KEYS.CURRENT_USER);
+  localStorage.removeItem(STORE.ACCOUNTS);
+  localStorage.removeItem(STORE.ACTIVE);
   window.location.href = 'login.html';
+}
+
+/* A login token was rejected. Remove that account (matched by token, so two
+   requests failing at once cannot remove the wrong account) and move on. */
+function sessionExpired(token) {
+  const accounts = getAccounts();
+  const gone = accounts.find(a => a.token === token);
+  if (gone) {
+    const wasActive = gone.user.id === getActiveId();
+    const left = accounts.filter(a => a !== gone);
+    saveAccounts(left);
+    if (wasActive) {
+      if (left.length) {
+        const next = left[left.length - 1];
+        localStorage.setItem(STORE.ACTIVE, String(next.user.id));
+        flash('The login for ' + gone.user.name + ' expired. Now using ' + next.user.name + '.');
+        window.location.href = homeFor(next.user);
+      } else {
+        localStorage.removeItem(STORE.ACTIVE);
+        flash('Your login expired. Please log in again.');
+        window.location.href = 'login.html';
+      }
+    }
+  }
+  const err = new Error('Login expired');
+  err.silent = true;      // pages skip showing this one, the redirect explains it
+  throw err;
 }
 
 /* Redirect helpers to protect pages */
@@ -285,100 +285,76 @@ function requireAdmin() {
   if (user && user.role !== 'admin') { window.location.href = 'dashboard.html'; return null; }
   return user;
 }
-/* Admin accounts have no user dashboard, so send them to the admin panel */
+/* Admin accounts have no user pages, so send them to the admin panel */
 function requireUser() {
   const user = requireLogin();
   if (user && user.role === 'admin') { window.location.href = 'admin.html'; return null; }
   return user;
 }
 
-/* ---------- Applications ---------- */
-function generatePassId() {
-  const apps = getData(DB_KEYS.APPLICATIONS);
-  return 'BP-' + (1001 + apps.length);
-}
+/* =========================================================
+   DATA (one small function per backend endpoint)
+   ========================================================= */
 
-function submitApplication(appData) {
-  const apps = getData(DB_KEYS.APPLICATIONS);
-  const newApp = Object.assign({
-    id: generatePassId(),
-    status: 'pending',
-    appliedDate: new Date().toISOString(),
-    approvedDate: null,
-    expiryDate: null
-  }, appData);
-  apps.push(newApp);
-  setData(DB_KEYS.APPLICATIONS, apps);
-  addNotification(appData.userEmail, 'Application submitted',
-    'Your ' + appData.passType + ' pass application (' + newApp.id + ') has been submitted and is pending review.');
-  return newApp;
-}
-
-function getUserApplications(email) {
-  return getData(DB_KEYS.APPLICATIONS).filter(a => a.userEmail === email)
-    .sort((a, b) => new Date(b.appliedDate) - new Date(a.appliedDate));
-}
-
-function getAllApplications() {
-  return getData(DB_KEYS.APPLICATIONS).sort((a, b) => new Date(b.appliedDate) - new Date(a.appliedDate));
-}
-
-function updateApplicationStatus(id, status) {
-  const apps = getData(DB_KEYS.APPLICATIONS);
-  const app = apps.find(a => a.id === id);
-  if (!app) return;
-  app.status = status;
-  if (status === 'approved') {
-    app.approvedDate = new Date().toISOString();
-    const days = (PASS_TYPES[app.passType] || { days: 30 }).days;
-    app.expiryDate = daysFromNow(days);
-    addNotification(app.userEmail, 'Pass approved',
-      'Your ' + app.passType + ' pass (' + app.id + ') has been approved. Valid till ' + formatDate(app.expiryDate) + '.');
-  } else if (status === 'rejected') {
-    addNotification(app.userEmail, 'Pass rejected',
-      'Your pass application (' + app.id + ') was rejected. Contact the administration or apply again.');
-  }
-  setData(DB_KEYS.APPLICATIONS, apps);
-}
-
-/* Auto-expire passes whose expiryDate has passed */
-function refreshExpiries() {
-  const apps = getData(DB_KEYS.APPLICATIONS);
-  let changed = false;
-  apps.forEach(a => {
-    if (a.status === 'approved' && a.expiryDate && new Date(a.expiryDate) < new Date()) {
-      a.status = 'expired';
-      changed = true;
-    }
+/* Adds the things the backend does not send: expiry date, what to show, a
+   readable pass number. A pass counts as expired once its days have run out,
+   even though the backend still says "approved" until it is renewed. */
+function decorate(a) {
+  const info = PASS_TYPES[a.pass_type] || { label: cap(a.pass_type), days: 30 };
+  const start = (a.status === 'approved' || a.status === 'expired') ? parseDate(a.reviewed_on) : null;
+  const expiry = start ? new Date(start.getTime() + info.days * 86400000) : null;
+  const lapsed = a.status === 'approved' && expiry && expiry.getTime() < Date.now();
+  return Object.assign({}, a, {
+    typeLabel: info.label,
+    days: info.days,
+    expiry: expiry,
+    state: lapsed ? 'expired' : a.status,
+    passId: 'BP-' + String(a.id).padStart(4, '0')
   });
-  if (changed) setData(DB_KEYS.APPLICATIONS, apps);
 }
 
-/* ---------- Notifications ---------- */
-function addNotification(userEmail, title, message) {
-  const notifs = getData(DB_KEYS.NOTIFICATIONS);
-  notifs.unshift({
-    id: 'N-' + (notifs.length + 1) + '-' + Date.now(),
-    userEmail: userEmail, title: title, message: message,
-    date: new Date().toISOString(),
-    read: false
-  });
-  setData(DB_KEYS.NOTIFICATIONS, notifs);
+async function fetchRoutes() {
+  const d = await api('/admin/routes', { auth: false });          // public endpoint
+  return d.routes || [];
+}
+async function fetchMyApplications() {
+  const d = await api('/passes/my-applications');
+  return (d.applications || []).map(decorate);
+}
+async function fetchAllApplications() {
+  const d = await api('/admin/applications');
+  return (d.applications || []).map(decorate);
+}
+function applyForPass(routeId, passType) {
+  return api('/passes/apply', { method: 'POST', body: { route_id: Number(routeId), pass_type: passType } });
+}
+function renewPass(applicationId) {
+  return api('/passes/renew/' + applicationId, { method: 'POST' });
+}
+function setApplicationStatus(applicationId, action) {            // action: 'approve' | 'reject'
+  return api('/admin/applications/' + applicationId + '/' + action, { method: 'PUT' });
+}
+function addRoute(route) {
+  return api('/admin/routes', { method: 'POST', body: route });
+}
+function fetchNotifications() { return api('/passes/notifications'); }
+function markNotificationsRead() { return api('/passes/notifications/read', { method: 'POST' }); }
+function verifyPass(applicationId) { return api('/passes/verify/' + applicationId, { auth: false }); }
+
+/* ---------- Route helpers ---------- */
+function routeName(r) { return r ? r.source + ' to ' + r.destination : 'Route removed'; }
+function routeLabel(r) { return 'Route ' + r.route_number + ' - ' + r.source + ' to ' + r.destination; }
+function plateHTML(r, large) {
+  return '<span class="plate' + (large ? ' plate-lg' : '') + '">' + esc(r ? r.route_number : '-') + '</span>';
 }
 
-function getUserNotifications(email) {
-  return getData(DB_KEYS.NOTIFICATIONS).filter(n => n.userEmail === email)
-    .sort((a, b) => new Date(b.date) - new Date(a.date));
-}
-
-function markNotificationsRead(email) {
-  const notifs = getData(DB_KEYS.NOTIFICATIONS);
-  notifs.forEach(n => { if (n.userEmail === email) n.read = true; });
-  setData(DB_KEYS.NOTIFICATIONS, notifs);
-}
-
-function unreadCount(email) {
-  return getData(DB_KEYS.NOTIFICATIONS).filter(n => n.userEmail === email && !n.read).length;
+/* Notifications only have a message, so work out the heading and icon */
+function describeNotification(n) {
+  const m = String(n.message || '').toLowerCase();
+  if (m.indexOf('approved') >= 0) return { title: 'Pass approved', kind: 'ok', icon: 'check' };
+  if (m.indexOf('rejected') >= 0) return { title: 'Pass rejected', kind: 'bad', icon: 'x' };
+  if (m.indexOf('submitted') >= 0) return { title: 'Application submitted', kind: '', icon: 'mail' };
+  return { title: 'Update', kind: '', icon: 'bell' };
 }
 
 /* ---------- Toast + one-shot messages across a redirect ---------- */
@@ -395,7 +371,7 @@ function showToast(message, isError) {
   toast.className = 'toast' + (isError ? ' error' : '');
   toast.style.display = 'block';
   clearTimeout(showToast._t);
-  showToast._t = setTimeout(() => { toast.style.display = 'none'; }, 3200);
+  showToast._t = setTimeout(function () { toast.style.display = 'none'; }, 3800);
 }
 function flash(message) {
   try { sessionStorage.setItem('bpms_flash', message); } catch (e) { /* ignore */ }
@@ -416,14 +392,26 @@ function badgeForStatus(status) {
   return map[status] || esc(status);
 }
 
-function plateHTML(routeStr, large) {
-  return '<span class="plate' + (large ? ' plate-lg' : '') + '">' + esc(routeNo(routeStr)) + '</span>';
-}
-
 function emptyState(iconName, message, ctaHref, ctaLabel, tight) {
   return '<div class="empty-state' + (tight ? ' tight' : '') + '"><div class="ic-wrap">' + icon(iconName, 26) + '</div>' +
     '<p>' + message + '</p>' +
     (ctaHref ? '<a class="btn btn-primary btn-sm" href="' + ctaHref + '">' + ctaLabel + '</a>' : '') + '</div>';
+}
+function loadingHTML(text) { return '<div class="loading">' + (text || 'Loading...') + '</div>'; }
+
+/* Shows a failed load with a Try again button. Silent errors (login expired) are skipped. */
+function showError(el, err, retry) {
+  if (err && err.silent) return;
+  el.innerHTML = '<div class="inline-error"><p>' + esc((err && err.message) || 'Could not load this.') + '</p>' +
+    (retry ? '<button type="button" class="btn btn-outline btn-sm">Try again</button>' : '') + '</div>';
+  const b = el.querySelector('button');
+  if (b) b.addEventListener('click', function () { el.innerHTML = loadingHTML(); retry(); });
+}
+
+function setBusy(btn, busy, label) {
+  if (!btn) return;
+  if (busy) { btn.dataset.label = btn.textContent; btn.textContent = label || 'Please wait...'; btn.disabled = true; }
+  else { btn.textContent = btn.dataset.label || btn.textContent; btn.disabled = false; }
 }
 
 /* =========================================================
@@ -454,14 +442,12 @@ function accountSwitcherHTML(user) {
       '<div class="acct-title">Accounts on this device</div>' +
       '<ul class="acct-list">' +
         accounts.map(function (a) {
-          const isCurrent = a.email === user.email;
-          const unread = (!isCurrent && a.role !== 'admin') ? unreadCount(a.email) : 0;
-          return '<li><button type="button" class="acct-item' + (isCurrent ? ' current' : '') + '" data-email="' + esc(a.email) + '"' +
+          const isCurrent = a.id === user.id;
+          return '<li><button type="button" class="acct-item' + (isCurrent ? ' current' : '') + '" data-id="' + a.id + '"' +
             (isCurrent ? ' aria-current="true"' : '') + '>' +
             avatar(a, 36) +
             '<span class="acct-meta"><b>' + esc(a.name) + '</b><small>' + esc(a.email) + '</small></span>' +
             (a.role === 'admin' ? '<span class="tag">Admin</span>' : '') +
-            (unread > 0 ? '<span class="count-pill" title="' + unread + ' unread">' + unread + '</span>' : '') +
             (isCurrent ? icon('check', 18) : '') +
           '</button></li>';
         }).join('') +
@@ -496,12 +482,27 @@ function wireAccountSwitcher() {
     if (e.key === 'Escape' && !panel.hidden) { setOpen(false); btn.focus(); }
   });
   panel.querySelectorAll('.acct-item:not(.current)').forEach(function (b) {
-    b.addEventListener('click', function () { switchAccount(b.dataset.email); });
+    b.addEventListener('click', function () { switchAccount(b.dataset.id); });
   });
   const one = document.getElementById('logoutOne');
   if (one) one.addEventListener('click', logoutUser);
   const all = document.getElementById('logoutAll');
   if (all) all.addEventListener('click', logoutAllAccounts);
+}
+
+/* Bell badge = unread notifications of the active account */
+function setBell(count) {
+  const badge = document.getElementById('notifBadge');
+  if (!badge) return;
+  badge.textContent = count || '';
+  badge.style.display = count ? '' : 'none';
+  if (badge.parentElement) {
+    badge.parentElement.setAttribute('aria-label', 'Notifications' + (count ? ', ' + count + ' unread' : ''));
+  }
+}
+async function refreshBell() {
+  try { const d = await fetchNotifications(); setBell(d.unread_count || 0); }
+  catch (e) { /* the bell is optional, ignore failures */ }
 }
 
 /* Renders the top bar. Logged-out visitors get a simple public bar. */
@@ -519,7 +520,6 @@ function initNavbar(activePage) {
     } else {
       const isAdmin = user.role === 'admin';
       const links = isAdmin ? [{ page: 'admin', href: 'admin.html', label: 'Applications' }] : USER_LINKS;
-      const unread = isAdmin ? 0 : unreadCount(user.email);
       host.innerHTML = '<div class="topbar-inner">' +
         brandHTML(homeFor(user)) + (isAdmin ? '<span class="admin-tag">Admin</span>' : '') +
         '<nav class="topnav" aria-label="Main">' +
@@ -530,26 +530,21 @@ function initNavbar(activePage) {
         '</nav>' +
         '<div class="topbar-right">' +
           (isAdmin ? '' :
-            '<a class="icon-btn" href="notifications.html" aria-label="Notifications' + (unread ? ', ' + unread + ' unread' : '') + '">' +
-              icon('bell', 20) +
-              '<span id="notifBadge" class="count-dot"' + (unread ? '' : ' style="display:none"') + '>' + (unread || '') + '</span>' +
-            '</a>') +
+            '<a class="icon-btn" href="notifications.html" aria-label="Notifications">' + icon('bell', 20) +
+              '<span id="notifBadge" class="count-dot" style="display:none"></span></a>') +
           accountSwitcherHTML(user) +
         '</div></div>';
       wireAccountSwitcher();
+      if (!isAdmin && activePage !== 'notifications') refreshBell();
     }
   }
   showFlash();
 }
 
-/* Run seed + expiry check on every page load */
-seedDatabase();
-refreshExpiries();
-
-/* If someone was already logged in with the old single-account version,
-   carry them over so they appear in the account switcher. */
-(function migrateSingleLogin() {
-  const current = getCurrentUser();
-  if (current && !getSessionEmails().includes(current.email)) setActiveAccount(current.email);
-  if (!current) localStorage.removeItem(DB_KEYS.CURRENT_USER);
+/* If accounts exist but none is marked active (cleared storage), pick the last one */
+(function fixActiveAccount() {
+  const accounts = getAccounts();
+  if (accounts.length && !getActiveAccount()) {
+    localStorage.setItem(STORE.ACTIVE, String(accounts[accounts.length - 1].user.id));
+  }
 })();

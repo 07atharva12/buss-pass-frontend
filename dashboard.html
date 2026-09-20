@@ -40,61 +40,70 @@
 
   document.getElementById('welcomeMsg').textContent = 'Welcome back, ' + user.name.split(' ')[0];
 
-  const apps = getUserApplications(user.email);
-  const approved = apps.filter(function (a) { return a.status === 'approved'; });
-  const pending = apps.filter(function (a) { return a.status === 'pending'; }).length;
-  const rejected = apps.filter(function (a) { return a.status === 'rejected'; }).length;
-
-  /* Current pass */
   const peek = document.getElementById('passPeek');
-  if (approved.length) {
-    const p = approved[0];
-    const left = daysLeft(p.expiryDate);
-    peek.innerHTML =
-      '<div class="peek on-dark">' +
-        '<div class="peek-main">' + plateHTML(p.route, true) +
-          '<div><div class="route-name">' + esc(routeName(p.route)) + '</div>' +
-          '<small>' + esc(p.passType) + ' pass, valid till ' + formatDate(p.expiryDate) + '</small></div></div>' +
-        '<div class="peek-meter"><div class="meter-label"><span>Time left</span><span>' + plural(left, 'day') + '</span></div>' +
-          '<div class="meter on-dark-meter"><i style="width:' + validityPercent(p) + '%"></i></div></div>' +
-        '<a class="btn btn-accent" href="mypass.html">Show my pass</a>' +
-      '</div>';
-  } else {
-    peek.innerHTML =
-      '<div class="peek empty">' +
-        '<div class="peek-main"><span class="plate plate-lg" style="opacity:.35">--</span>' +
-          '<div><div class="route-name">No active pass</div><small>Apply for a pass to get your QR code.</small></div></div>' +
-        '<a class="btn btn-primary" href="apply.html">Apply for a pass</a>' +
-      '</div>';
-  }
-
-  /* Numbers */
-  document.getElementById('statCards').innerHTML =
-    '<div class="stat"><div class="stat-num">' + apps.length + '</div><div class="stat-label"><span class="dot"></span>Applications</div></div>' +
-    '<div class="stat"><div class="stat-num">' + approved.length + '</div><div class="stat-label"><span class="dot ok"></span>Approved</div></div>' +
-    '<div class="stat"><div class="stat-num">' + pending + '</div><div class="stat-label"><span class="dot warn"></span>Pending review</div></div>' +
-    '<div class="stat"><div class="stat-num">' + rejected + '</div><div class="stat-label"><span class="dot bad"></span>Rejected</div></div>';
-
-  /* Table */
+  const stats = document.getElementById('statCards');
   const box = document.getElementById('recentApplications');
-  if (apps.length === 0) {
-    box.innerHTML = emptyState('ticket', 'You have not applied for a pass yet.', 'apply.html', 'Apply for a pass', true);
-    return;
+
+  function render(apps) {
+    const approved = apps.filter(function (a) { return a.state === 'approved'; });
+    const pending = apps.filter(function (a) { return a.state === 'pending'; }).length;
+    const rejected = apps.filter(function (a) { return a.state === 'rejected'; }).length;
+
+    /* Current pass */
+    if (approved.length) {
+      const p = approved[0];
+      peek.innerHTML =
+        '<div class="peek on-dark">' +
+          '<div class="peek-main">' + plateHTML(p.route, true) +
+            '<div><div class="route-name">' + esc(routeName(p.route)) + '</div>' +
+            '<small>' + esc(p.typeLabel) + ' pass, valid till ' + formatDate(p.expiry) + '</small></div></div>' +
+          '<div class="peek-meter"><div class="meter-label"><span>Time left</span><span>' + plural(daysLeft(p.expiry), 'day') + '</span></div>' +
+            '<div class="meter on-dark-meter"><i style="width:' + validityPercent(p) + '%"></i></div></div>' +
+          '<a class="btn btn-accent" href="mypass.html">Show my pass</a>' +
+        '</div>';
+    } else {
+      peek.innerHTML =
+        '<div class="peek empty">' +
+          '<div class="peek-main"><span class="plate plate-lg" style="opacity:.35">--</span>' +
+            '<div><div class="route-name">No active pass</div><small>Apply for a pass to get your QR code.</small></div></div>' +
+          '<a class="btn btn-primary" href="apply.html">Apply for a pass</a>' +
+        '</div>';
+    }
+
+    /* Numbers */
+    stats.innerHTML =
+      '<div class="stat"><div class="stat-num">' + apps.length + '</div><div class="stat-label"><span class="dot"></span>Applications</div></div>' +
+      '<div class="stat"><div class="stat-num">' + approved.length + '</div><div class="stat-label"><span class="dot ok"></span>Approved</div></div>' +
+      '<div class="stat"><div class="stat-num">' + pending + '</div><div class="stat-label"><span class="dot warn"></span>Pending review</div></div>' +
+      '<div class="stat"><div class="stat-num">' + rejected + '</div><div class="stat-label"><span class="dot bad"></span>Rejected</div></div>';
+
+    /* Table */
+    if (apps.length === 0) {
+      box.innerHTML = emptyState('ticket', 'You have not applied for a pass yet.', 'apply.html', 'Apply for a pass', true);
+      return;
+    }
+    box.innerHTML =
+      '<div class="table-wrap"><table>' +
+        '<thead><tr><th>Pass ID</th><th>Route</th><th>Type</th><th>Applied on</th><th>Status</th></tr></thead>' +
+        '<tbody>' +
+        apps.slice(0, 5).map(function (a) {
+          return '<tr>' +
+            '<td class="pass-id">' + esc(a.passId) + '</td>' +
+            '<td><div class="cell-route">' + plateHTML(a.route) + '<span>' + esc(routeName(a.route)) + '</span></div></td>' +
+            '<td>' + esc(a.typeLabel) + '</td>' +
+            '<td>' + formatDate(a.applied_on) + '</td>' +
+            '<td>' + badgeForStatus(a.state) + '</td>' +
+          '</tr>';
+        }).join('') +
+        '</tbody></table></div>';
   }
-  box.innerHTML =
-    '<div class="table-wrap"><table>' +
-      '<thead><tr><th>Pass ID</th><th>Route</th><th>Type</th><th>Applied on</th><th>Status</th></tr></thead>' +
-      '<tbody>' +
-      apps.slice(0, 5).map(function (a) {
-        return '<tr>' +
-          '<td class="pass-id">' + esc(a.id) + '</td>' +
-          '<td><div class="cell-route">' + plateHTML(a.route) + '<span>' + esc(routeName(a.route)) + '</span></div></td>' +
-          '<td>' + esc(a.passType) + '</td>' +
-          '<td>' + formatDate(a.appliedDate) + '</td>' +
-          '<td>' + badgeForStatus(a.status) + '</td>' +
-        '</tr>';
-      }).join('') +
-      '</tbody></table></div>';
+
+  async function load() {
+    box.innerHTML = loadingHTML();
+    try { render(await fetchMyApplications()); }
+    catch (e) { peek.innerHTML = ''; stats.innerHTML = ''; showError(box, e, load); }
+  }
+  load();
 })();
 </script>
 </body>

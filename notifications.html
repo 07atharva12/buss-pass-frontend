@@ -16,7 +16,7 @@
 <main class="wrap page page-narrow">
   <div class="page-head">
     <h1>Notifications</h1>
-    <p>Updates on your applications, approvals and pass expiry.</p>
+    <p>Updates on your applications and approvals.</p>
   </div>
 
   <div class="card" id="notifBox" style="padding:8px 12px;"></div>
@@ -27,29 +27,38 @@
 (function () {
   const user = requireUser();
   if (!user) return;
+  initNavbar('notifications');
 
-  const notifs = getUserNotifications(user.email);
   const box = document.getElementById('notifBox');
 
-  if (notifs.length === 0) {
-    box.innerHTML = emptyState('bell', 'Nothing new. Updates about your passes will show up here.', null, null);
-  } else {
-    box.innerHTML = notifs.map(function (n) {
-      const t = n.title.toLowerCase();
-      const kind = t.indexOf('approved') >= 0 ? 'ok' : (t.indexOf('rejected') >= 0 ? 'bad' : '');
-      const ic = kind === 'ok' ? 'check' : kind === 'bad' ? 'x' : 'mail';
-      return '<div class="notif' + (!n.read ? ' unread' : '') + '">' +
-        '<div class="notif-ic ' + kind + '">' + icon(ic, 20) + '</div>' +
-        '<div><div class="title">' + esc(n.title) + '</div>' +
-        '<div>' + esc(n.message) + '</div>' +
-        '<div class="time">' + formatDate(n.date) + '</div></div>' +
-      '</div>';
-    }).join('');
-  }
+  async function load() {
+    box.innerHTML = loadingHTML();
+    try {
+      const data = await fetchNotifications();
+      const notifs = data.notifications || [];
 
-  // The list above was drawn with the unread highlights; now mark everything read so the bell clears
-  markNotificationsRead(user.email);
-  initNavbar('notifications');
+      if (notifs.length === 0) {
+        box.innerHTML = emptyState('bell', 'Nothing new. Updates about your passes will show up here.', null, null);
+        return;
+      }
+      box.innerHTML = notifs.map(function (n) {
+        const d = describeNotification(n);
+        return '<div class="notif' + (!n.is_read ? ' unread' : '') + '">' +
+          '<div class="notif-ic ' + d.kind + '">' + icon(d.icon, 20) + '</div>' +
+          '<div><div class="title">' + esc(d.title) + '</div>' +
+          '<div>' + esc(n.message) + '</div>' +
+          '<div class="time">' + formatDate(n.created_at) + '</div></div>' +
+        '</div>';
+      }).join('');
+
+      // The list was drawn with the unread highlights; now mark everything read so the bell clears
+      if (data.unread_count > 0) {
+        await markNotificationsRead();
+        setBell(0);
+      }
+    } catch (e) { showError(box, e, load); }
+  }
+  load();
 })();
 </script>
 </body>

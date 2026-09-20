@@ -29,54 +29,88 @@
   if (!user) return;
   initNavbar('track');
 
-  const apps = getUserApplications(user.email);
   const box = document.getElementById('appList');
 
-  if (apps.length === 0) {
-    box.innerHTML = '<div class="card">' + emptyState('inbox', 'No applications yet.', 'apply.html', 'Apply for a pass') + '</div>';
-    return;
-  }
-
   /* Three steps: Applied, Under review, then the outcome */
-  function stepper(status) {
+  function stepper(state) {
     const check = icon('check', 15), cross = icon('x', 15), clock = icon('clock', 15);
-    let s1 = 'done', s2, s3, last = 'Approved';
-    if (status === 'pending') { s2 = 'current'; s3 = ''; }
-    else if (status === 'approved') { s2 = 'done'; s3 = 'done'; }
-    else if (status === 'rejected') { s2 = 'done'; s3 = 'bad'; last = 'Rejected'; }
+    let s2, s3, last = 'Approved';
+    if (state === 'pending') { s2 = 'current'; s3 = ''; }
+    else if (state === 'approved') { s2 = 'done'; s3 = 'done'; }
+    else if (state === 'rejected') { s2 = 'done'; s3 = 'bad'; last = 'Rejected'; }
     else { s2 = 'done'; s3 = 'off'; last = 'Expired'; }
     return '<div class="steps" aria-label="Application progress">' +
-      '<div class="step ' + s1 + '"><span class="step-dot">' + check + '</span>Applied</div>' +
+      '<div class="step done"><span class="step-dot">' + check + '</span>Applied</div>' +
       '<div class="step ' + s2 + '"><span class="step-dot">' + (s2 === 'done' ? check : clock) + '</span>Under review</div>' +
       '<div class="step ' + s3 + '"><span class="step-dot">' +
         (s3 === 'done' ? check : s3 === 'bad' ? cross : s3 === 'off' ? clock : '') + '</span>' + last + '</div>' +
     '</div>';
   }
 
-  box.innerHTML = apps.map(function (a) {
-    const isRejected = a.status === 'rejected';
-    const isExpired = a.status === 'expired';
-    const dateLabel = isRejected ? 'Outcome' : isExpired ? 'Expired on' : 'Valid till';
-    const dateValue = isRejected ? 'Rejected' : (a.expiryDate ? formatDate(a.expiryDate) : 'Awaiting approval');
-    return '' +
-    '<article class="card">' +
-      '<div class="track-top">' +
-        '<div class="track-id">' + plateHTML(a.route, true) +
-          '<div><span class="pass-id">' + esc(a.id) + '</span><span class="sub-line">' + esc(routeName(a.route)) + '</span></div>' +
-          badgeForStatus(a.status) +
+  function render(apps) {
+    if (apps.length === 0) {
+      box.innerHTML = '<div class="card">' + emptyState('inbox', 'No applications yet.', 'apply.html', 'Apply for a pass') + '</div>';
+      return;
+    }
+    box.innerHTML = apps.map(function (a) {
+      const isRejected = a.state === 'rejected';
+      const isExpired = a.state === 'expired';
+      // A pass that was renewed early is marked expired by the backend before its end date
+      const endedEarly = isExpired && a.expiry && a.expiry.getTime() > Date.now();
+      const dateLabel = isRejected || endedEarly ? 'Outcome' : isExpired ? 'Expired on' : 'Valid till';
+      const dateValue = isRejected ? 'Rejected' : endedEarly ? 'Renewed' : (a.expiry ? formatDate(a.expiry) : 'Awaiting approval');
+
+      // Renewing is only allowed by the backend while the pass is still "approved"
+      let action = '';
+      if (a.status === 'approved') {
+        action = (a.state === 'approved' ? '<a class="btn btn-outline btn-sm" href="mypass.html">Show pass</a> ' : '') +
+          '<button type="button" class="btn btn-outline btn-sm" data-renew="' + a.id + '">Renew</button>';
+      } else if (isRejected || isExpired) {
+        action = '<a class="btn btn-outline btn-sm" href="apply.html">Apply again</a>';
+      }
+
+      return '' +
+      '<article class="card">' +
+        '<div class="track-top">' +
+          '<div class="track-id">' + plateHTML(a.route, true) +
+            '<div><span class="pass-id">' + esc(a.passId) + '</span><span class="sub-line">' + esc(routeName(a.route)) + '</span></div>' +
+            badgeForStatus(a.state) +
+          '</div>' +
+          '<div class="flex gap-10">' + action + '</div>' +
         '</div>' +
-        (a.status === 'approved' ? '<a class="btn btn-outline btn-sm" href="mypass.html">Show pass</a>' :
-         isRejected || isExpired ? '<a class="btn btn-outline btn-sm" href="apply.html">Apply again</a>' : '') +
-      '</div>' +
-      '<dl class="kv">' +
-        '<div><dt>Pass type</dt><dd>' + esc(a.passType) + '</dd></div>' +
-        '<div><dt>Amount</dt><dd>₹' + Number(a.amount || 0).toLocaleString('en-IN') + '</dd></div>' +
-        '<div><dt>Applied on</dt><dd>' + formatDate(a.appliedDate) + '</dd></div>' +
-        '<div><dt>' + dateLabel + '</dt><dd>' + dateValue + '</dd></div>' +
-      '</dl>' +
-      stepper(a.status) +
-    '</article>';
-  }).join('');
+        '<dl class="kv">' +
+          '<div><dt>Pass type</dt><dd>' + esc(a.typeLabel) + '</dd></div>' +
+          '<div><dt>Route fare</dt><dd>' + (a.route ? money(a.route.fare) : '-') + '</dd></div>' +
+          '<div><dt>Applied on</dt><dd>' + formatDate(a.applied_on) + '</dd></div>' +
+          '<div><dt>' + dateLabel + '</dt><dd>' + dateValue + '</dd></div>' +
+        '</dl>' +
+        stepper(a.state) +
+      '</article>';
+    }).join('');
+  }
+
+  async function load() {
+    box.innerHTML = loadingHTML();
+    try { render(await fetchMyApplications()); }
+    catch (e) { showError(box, e, load); }
+  }
+
+  box.addEventListener('click', async function (e) {
+    const btn = e.target.closest('button[data-renew]');
+    if (!btn) return;
+    if (!window.confirm('Renew this pass?\n\nThe current pass is marked expired and a new request is sent for approval.')) return;
+    setBusy(btn, true, 'Renewing...');
+    try {
+      await renewPass(btn.dataset.renew);
+      showToast('Renewal submitted for approval.');
+      load();
+    } catch (err) {
+      setBusy(btn, false);
+      if (!err.silent) showToast(err.message, true);
+    }
+  });
+
+  load();
 })();
 </script>
 </body>

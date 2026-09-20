@@ -522,3 +522,39 @@ tbody tr:hover td{background:#fafaf7;}
   .ticket{box-shadow:none;border:1px solid #999;}
   .ticket-stub::before,.ticket-stub::after{display:none;}
 }
+
+/* ===== Loading, errors, server wake-up ===== */
+.loading{text-align:center;color:var(--muted);padding:36px 0;}
+.inline-error{text-align:center;padding:28px 16px;}
+.inline-error p{margin-bottom:12px;font-weight:600;color:var(--bad);}
+.wake{
+  position:fixed;top:0;left:0;right:0;z-index:100;background:var(--lamp);color:var(--lamp-ink);
+  text-align:center;font-weight:600;font-size:.9rem;padding:9px 16px;
+}
+.btn[disabled]{opacity:.6;cursor:not-allowed;}
+
+/* ===== Add route (admin) ===== */
+.route-form{display:grid;grid-template-columns:.8fr 1.3fr 1.3fr .8fr auto;gap:12px;align-items:end;}
+.route-form .field{margin-bottom:0;}
+@media(max-width:900px){
+  .route-form{grid-template-columns:1fr 1fr;}
+  .route-form .btn{grid-column:1 / -1;}
+}
+.route-note{color:var(--muted);font-size:.9rem;margin-bottom:16px;max-width:60ch;}
+
+/* ===== Verify page (opened by scanning the QR code) ===== */
+.verify{
+  max-width:520px;margin:0 auto;text-align:center;background:#fff;border:1px solid var(--line);
+  border-radius:var(--r-ticket);padding:38px 28px 32px;
+  box-shadow:0 24px 44px -28px rgba(13,14,16,.45);
+}
+.verify-mark{width:76px;height:76px;border-radius:50%;display:grid;place-items:center;margin:0 auto 16px;color:#fff;}
+.verify.ok .verify-mark{background:var(--ok);}
+.verify.bad .verify-mark{background:var(--bad);}
+.verify h1{font-size:2.1rem;font-weight:700;}
+.verify.ok h1{color:var(--ok);}
+.verify.bad h1{color:var(--bad);}
+.verify .lead{color:var(--muted);margin-top:6px;}
+.verify dl{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:26px;text-align:left;padding-top:22px;border-top:2px dashed var(--line);}
+.verify dt{color:var(--muted);font-size:.82rem;}
+.verify dd{font-weight:600;margin-top:2px;}

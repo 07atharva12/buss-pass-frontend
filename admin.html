@@ -34,11 +34,24 @@
         </select>
         <div class="search">
           <span class="ic-slot" aria-hidden="true"></span>
-          <input type="search" id="searchBox" class="control" placeholder="Search by name or pass ID" aria-label="Search applications">
+          <input type="search" id="searchBox" class="control" placeholder="Search name, ID or route" aria-label="Search applications">
         </div>
       </div>
     </div>
     <div id="adminTable"></div>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2>Add a route</h2></div>
+    <p class="route-note">New routes show up in the Apply form straight away.</p>
+    <form class="route-form" id="routeForm" novalidate>
+      <div class="field"><label for="rNumber">Route number</label><input type="text" id="rNumber" placeholder="e.g. 12" required></div>
+      <div class="field"><label for="rSource">From</label><input type="text" id="rSource" placeholder="e.g. Andheri" required></div>
+      <div class="field"><label for="rDest">To</label><input type="text" id="rDest" placeholder="e.g. Dadar" required></div>
+      <div class="field"><label for="rFare">Fare (₹)</label><input type="number" id="rFare" min="1" step="any" placeholder="e.g. 600" required></div>
+      <button type="submit" class="btn btn-primary" id="routeBtn">Add route</button>
+    </form>
+    <div class="error-text" id="routeError" role="alert"></div>
   </section>
 </main>
 
@@ -49,30 +62,36 @@
   if (!admin) return;
   initNavbar('admin');
 
-  // Add the search icon (kept in JS so it uses the same icon set as the rest of the app)
+  // Search icon (kept in JS so it uses the same icon set as the rest of the app)
   document.querySelector('.ic-slot').outerHTML = icon('search', 18);
 
+  const table = document.getElementById('adminTable');
+  let all = [];
+
+  /* The applicant's name only appears if the backend sends it (see README notes) */
+  function applicantName(a) { return a.user_name || ('User #' + a.user_id); }
+
   function render() {
-    const all = getAllApplications();
     const statusFilter = document.getElementById('filterStatus').value;
     const search = document.getElementById('searchBox').value.trim().toLowerCase();
 
     const filtered = all.filter(function (a) {
-      const okStatus = statusFilter === 'all' || a.status === statusFilter;
-      const okSearch = !search || a.name.toLowerCase().indexOf(search) >= 0 || a.id.toLowerCase().indexOf(search) >= 0;
-      return okStatus && okSearch;
+      const okStatus = statusFilter === 'all' || a.state === statusFilter;
+      const hay = (applicantName(a) + ' ' + a.passId + ' ' + (a.route ? a.route.route_number + ' ' + routeName(a.route) : '')).toLowerCase();
+      return okStatus && (!search || hay.indexOf(search) >= 0);
     });
 
-    const count = function (s) { return all.filter(function (a) { return a.status === s; }).length; };
+    const count = function (s) { return all.filter(function (a) { return a.state === s; }).length; };
     document.getElementById('adminStats').innerHTML =
       '<div class="stat"><div class="stat-num">' + all.length + '</div><div class="stat-label"><span class="dot"></span>Total applications</div></div>' +
       '<div class="stat"><div class="stat-num">' + count('pending') + '</div><div class="stat-label"><span class="dot warn"></span>Pending review</div></div>' +
       '<div class="stat"><div class="stat-num">' + count('approved') + '</div><div class="stat-label"><span class="dot ok"></span>Active passes</div></div>' +
       '<div class="stat"><div class="stat-num">' + count('rejected') + '</div><div class="stat-label"><span class="dot bad"></span>Rejected</div></div>';
 
-    const table = document.getElementById('adminTable');
     if (filtered.length === 0) {
-      table.innerHTML = emptyState('inbox', 'No applications match these filters. Clear the search or pick another status.', null, null, true);
+      table.innerHTML = emptyState('inbox', all.length
+        ? 'No applications match these filters. Clear the search or pick another status.'
+        : 'No applications yet.', null, null, true);
       return;
     }
 
@@ -82,16 +101,16 @@
         '<tbody>' +
         filtered.map(function (a) {
           return '<tr>' +
-            '<td class="pass-id">' + esc(a.id) + '</td>' +
-            '<td>' + esc(a.name) + '<span class="sub-line">' + esc(a.userEmail) + '</span></td>' +
+            '<td class="pass-id">' + esc(a.passId) + '</td>' +
+            '<td>' + esc(applicantName(a)) + (a.user_email ? '<span class="sub-line">' + esc(a.user_email) + '</span>' : '') + '</td>' +
             '<td><div class="cell-route">' + plateHTML(a.route) + '<span>' + esc(routeName(a.route)) + '</span></div></td>' +
-            '<td>' + esc(a.passType) + '</td>' +
-            '<td>' + formatDate(a.appliedDate) + '</td>' +
-            '<td>' + badgeForStatus(a.status) + '</td>' +
+            '<td>' + esc(a.typeLabel) + '</td>' +
+            '<td>' + formatDate(a.applied_on) + '</td>' +
+            '<td>' + badgeForStatus(a.state) + '</td>' +
             '<td>' + (a.status === 'pending'
               ? '<div class="flex gap-10">' +
-                  '<button type="button" class="btn btn-success btn-sm" data-act="approved" data-id="' + esc(a.id) + '">Approve</button>' +
-                  '<button type="button" class="btn btn-danger btn-sm" data-act="rejected" data-id="' + esc(a.id) + '">Reject</button>' +
+                  '<button type="button" class="btn btn-success btn-sm" data-act="approve" data-id="' + a.id + '">Approve</button>' +
+                  '<button type="button" class="btn btn-danger btn-sm" data-act="reject" data-id="' + a.id + '">Reject</button>' +
                 '</div>'
               : '<span class="text-muted">None</span>') + '</td>' +
           '</tr>';
@@ -99,17 +118,61 @@
         '</tbody></table></div>';
   }
 
-  document.getElementById('adminTable').addEventListener('click', function (e) {
+  async function load() {
+    table.innerHTML = loadingHTML();
+    try { all = await fetchAllApplications(); render(); }
+    catch (e) { document.getElementById('adminStats').innerHTML = ''; showError(table, e, load); }
+  }
+
+  table.addEventListener('click', async function (e) {
     const btn = e.target.closest('button[data-act]');
     if (!btn) return;
-    updateApplicationStatus(btn.dataset.id, btn.dataset.act);
-    showToast(btn.dataset.act === 'approved' ? 'Application ' + btn.dataset.id + ' approved.' : 'Application ' + btn.dataset.id + ' rejected.',
-      btn.dataset.act === 'rejected');
-    render();
+    const row = btn.closest('tr');
+    row.querySelectorAll('button').forEach(function (b) { b.disabled = true; });
+    try {
+      await setApplicationStatus(btn.dataset.id, btn.dataset.act);
+      showToast(btn.dataset.act === 'approve' ? 'Application approved.' : 'Application rejected.', btn.dataset.act === 'reject');
+      load();
+    } catch (err) {
+      row.querySelectorAll('button').forEach(function (b) { b.disabled = false; });
+      if (!err.silent) showToast(err.message, true);
+    }
   });
   document.getElementById('filterStatus').addEventListener('change', render);
   document.getElementById('searchBox').addEventListener('input', render);
-  render();
+
+  /* Add a route */
+  document.getElementById('routeForm').addEventListener('submit', async function (e) {
+    e.preventDefault();
+    const errorBox = document.getElementById('routeError');
+    const btn = document.getElementById('routeBtn');
+    errorBox.style.display = 'none';
+    const route = {
+      route_number: document.getElementById('rNumber').value.trim(),
+      source: document.getElementById('rSource').value.trim(),
+      destination: document.getElementById('rDest').value.trim(),
+      fare: document.getElementById('rFare').value
+    };
+    if (!route.route_number || !route.source || !route.destination || !route.fare) {
+      errorBox.textContent = 'Fill in every field.';
+      errorBox.style.display = 'block';
+      return;
+    }
+    setBusy(btn, true, 'Adding...');
+    try {
+      await addRoute(route);
+      showToast('Route ' + route.route_number + ' added.');
+      e.target.reset();
+      setBusy(btn, false);
+    } catch (err) {
+      setBusy(btn, false);
+      if (err.silent) return;
+      errorBox.textContent = err.message;
+      errorBox.style.display = 'block';
+    }
+  });
+
+  load();
 })();
 </script>
 </body>

@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Verify pass - Smart Bus Pass</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Instrument+Sans:wght@400..700&display=swap">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header id="topbar"></header>
+
+<main class="wrap page">
+  <div id="result">
+    <div class="verify"><div class="loading">Checking this pass...</div></div>
+  </div>
+</main>
+
+<script src="js/app.js"></script>
+<script>
+(function () {
+  initNavbar('verify');
+
+  const result = document.getElementById('result');
+  const id = Number(new URLSearchParams(window.location.search).get('id'));
+
+  function show(ok, heading, lead, details) {
+    result.innerHTML =
+      '<div class="verify ' + (ok ? 'ok' : 'bad') + '">' +
+        '<div class="verify-mark">' + icon(ok ? 'check' : 'x', 38) + '</div>' +
+        '<h1>' + heading + '</h1>' +
+        '<p class="lead">' + lead + '</p>' +
+        (details || '') +
+      '</div>';
+  }
+
+  if (!id) {
+    show(false, 'No pass to check', 'This link is missing a pass number. Scan the QR code on the pass again.');
+    return;
+  }
+
+  fetchVerify();
+
+  async function fetchVerify() {
+    try {
+      const d = await verifyPass(id);
+      const passId = 'BP-' + String(id).padStart(4, '0');
+      const details =
+        '<dl>' +
+          '<div><dt>Pass ID</dt><dd class="pass-id">' + esc(passId) + '</dd></div>' +
+          '<div><dt>Route</dt><dd>' + (d.route ? '<span class="plate">' + esc(d.route) + '</span>' : '-') + '</dd></div>' +
+          '<div><dt>Pass type</dt><dd>' + esc(cap(d.pass_type)) + '</dd></div>' +
+          '<div><dt>Status</dt><dd>' + badgeForStatus(d.status) + '</dd></div>' +
+        '</dl>';
+      if (d.valid) show(true, 'Valid pass', 'This pass is approved.', details);
+      else show(false, 'Not valid', 'This pass is ' + esc(d.status) + ', so it cannot be used.', details);
+    } catch (e) {
+      show(false, 'Pass not found', esc(e.message));
+    }
+  }
+})();
+</script>
+</body>
+</html>
