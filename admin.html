@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin panel - Smart Bus Pass</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Instrument+Sans:wght@400..700&display=swap">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header id="topbar"></header>
+
+<main class="wrap page">
+  <div class="page-head">
+    <h1>Applications</h1>
+    <p>Review, approve and reject bus pass applications.</p>
+  </div>
+
+  <div class="stats" id="adminStats"></div>
+
+  <section class="card">
+    <div class="card-head">
+      <h2>All applications</h2>
+      <div class="filters">
+        <select id="filterStatus" class="control" style="width:auto;" aria-label="Filter by status">
+          <option value="all">All statuses</option>
+          <option value="pending">Pending</option>
+          <option value="approved">Approved</option>
+          <option value="rejected">Rejected</option>
+          <option value="expired">Expired</option>
+        </select>
+        <div class="search">
+          <span class="ic-slot" aria-hidden="true"></span>
+          <input type="search" id="searchBox" class="control" placeholder="Search by name or pass ID" aria-label="Search applications">
+        </div>
+      </div>
+    </div>
+    <div id="adminTable"></div>
+  </section>
+</main>
+
+<script src="js/app.js"></script>
+<script>
+(function () {
+  const admin = requireAdmin();
+  if (!admin) return;
+  initNavbar('admin');
+
+  // Add the search icon (kept in JS so it uses the same icon set as the rest of the app)
+  document.querySelector('.ic-slot').outerHTML = icon('search', 18);
+
+  function render() {
+    const all = getAllApplications();
+    const statusFilter = document.getElementById('filterStatus').value;
+    const search = document.getElementById('searchBox').value.trim().toLowerCase();
+
+    const filtered = all.filter(function (a) {
+      const okStatus = statusFilter === 'all' || a.status === statusFilter;
+      const okSearch = !search || a.name.toLowerCase().indexOf(search) >= 0 || a.id.toLowerCase().indexOf(search) >= 0;
+      return okStatus && okSearch;
+    });
+
+    const count = function (s) { return all.filter(function (a) { return a.status === s; }).length; };
+    document.getElementById('adminStats').innerHTML =
+      '<div class="stat"><div class="stat-num">' + all.length + '</div><div class="stat-label"><span class="dot"></span>Total applications</div></div>' +
+      '<div class="stat"><div class="stat-num">' + count('pending') + '</div><div class="stat-label"><span class="dot warn"></span>Pending review</div></div>' +
+      '<div class="stat"><div class="stat-num">' + count('approved') + '</div><div class="stat-label"><span class="dot ok"></span>Active passes</div></div>' +
+      '<div class="stat"><div class="stat-num">' + count('rejected') + '</div><div class="stat-label"><span class="dot bad"></span>Rejected</div></div>';
+
+    const table = document.getElementById('adminTable');
+    if (filtered.length === 0) {
+      table.innerHTML = emptyState('inbox', 'No applications match these filters. Clear the search or pick another status.', null, null, true);
+      return;
+    }
+
+    table.innerHTML =
+      '<div class="table-wrap"><table>' +
+        '<thead><tr><th>Pass ID</th><th>Applicant</th><th>Route</th><th>Type</th><th>Applied</th><th>Status</th><th>Action</th></tr></thead>' +
+        '<tbody>' +
+        filtered.map(function (a) {
+          return '<tr>' +
+            '<td class="pass-id">' + esc(a.id) + '</td>' +
+            '<td>' + esc(a.name) + '<span class="sub-line">' + esc(a.userEmail) + '</span></td>' +
+            '<td><div class="cell-route">' + plateHTML(a.route) + '<span>' + esc(routeName(a.route)) + '</span></div></td>' +
+            '<td>' + esc(a.passType) + '</td>' +
+            '<td>' + formatDate(a.appliedDate) + '</td>' +
+            '<td>' + badgeForStatus(a.status) + '</td>' +
+            '<td>' + (a.status === 'pending'
+              ? '<div class="flex gap-10">' +
+                  '<button type="button" class="btn btn-success btn-sm" data-act="approved" data-id="' + esc(a.id) + '">Approve</button>' +
+                  '<button type="button" class="btn btn-danger btn-sm" data-act="rejected" data-id="' + esc(a.id) + '">Reject</button>' +
+                '</div>'
+              : '<span class="text-muted">None</span>') + '</td>' +
+          '</tr>';
+        }).join('') +
+        '</tbody></table></div>';
+  }
+
+  document.getElementById('adminTable').addEventListener('click', function (e) {
+    const btn = e.target.closest('button[data-act]');
+    if (!btn) return;
+    updateApplicationStatus(btn.dataset.id, btn.dataset.act);
+    showToast(btn.dataset.act === 'approved' ? 'Application ' + btn.dataset.id + ' approved.' : 'Application ' + btn.dataset.id + ' rejected.',
+      btn.dataset.act === 'rejected');
+    render();
+  });
+  document.getElementById('filterStatus').addEventListener('change', render);
+  document.getElementById('searchBox').addEventListener('input', render);
+  render();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Notifications - Smart Bus Pass</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Instrument+Sans:wght@400..700&display=swap">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header id="topbar"></header>
+
+<main class="wrap page page-narrow">
+  <div class="page-head">
+    <h1>Notifications</h1>
+    <p>Updates on your applications, approvals and pass expiry.</p>
+  </div>
+
+  <div class="card" id="notifBox" style="padding:8px 12px;"></div>
+</main>
+
+<script src="js/app.js"></script>
+<script>
+(function () {
+  const user = requireUser();
+  if (!user) return;
+
+  const notifs = getUserNotifications(user.email);
+  const box = document.getElementById('notifBox');
+
+  if (notifs.length === 0) {
+    box.innerHTML = emptyState('bell', 'Nothing new. Updates about your passes will show up here.', null, null);
+  } else {
+    box.innerHTML = notifs.map(function (n) {
+      const t = n.title.toLowerCase();
+      const kind = t.indexOf('approved') >= 0 ? 'ok' : (t.indexOf('rejected') >= 0 ? 'bad' : '');
+      const ic = kind === 'ok' ? 'check' : kind === 'bad' ? 'x' : 'mail';
+      return '<div class="notif' + (!n.read ? ' unread' : '') + '">' +
+        '<div class="notif-ic ' + kind + '">' + icon(ic, 20) + '</div>' +
+        '<div><div class="title">' + esc(n.title) + '</div>' +
+        '<div>' + esc(n.message) + '</div>' +
+        '<div class="time">' + formatDate(n.date) + '</div></div>' +
+      '</div>';
+    }).join('');
+  }
+
+  // The list above was drawn with the unread highlights; now mark everything read so the bell clears
+  markNotificationsRead(user.email);
+  initNavbar('notifications');
+})();
+</script>
+</body>
+</html>

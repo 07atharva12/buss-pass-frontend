@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Smart Bus Pass - Apply for your bus pass online</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Instrument+Sans:wght@400..700&display=swap">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header id="topbar"></header>
+
+<main>
+  <section class="hero">
+    <div class="wrap hero-grid">
+      <div>
+        <h1>Your bus pass, without the queue.</h1>
+        <p class="lede">Apply online, follow your application until it's approved, then ride with a QR code on your phone.</p>
+        <div class="hero-cta">
+          <a class="btn btn-accent" href="register.html">Apply for a pass</a>
+          <a class="btn btn-outline" href="login.html">Log in</a>
+        </div>
+      </div>
+
+      <div class="board" role="img" aria-label="A bus destination board showing the available routes">
+        <div class="roll" id="roll">
+          <div class="board-no" id="boardNo">12</div>
+          <div>
+            <div class="board-dest" id="boardDest">Tech Park</div>
+            <div class="board-via" id="boardVia">from City Center</div>
+          </div>
+        </div>
+        <div class="board-foot"><span>Monthly pass</span><span>₹600</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap">
+      <h2>How it works</h2>
+      <div class="steps-3">
+        <div>
+          <div class="step-n">1</div>
+          <h3>Apply</h3>
+          <p>Choose your route and pass type, add your ID proof, and submit the form.</p>
+        </div>
+        <div>
+          <div class="step-n">2</div>
+          <h3>Get approved</h3>
+          <p>An admin reviews your application. You get a notification when it's approved or rejected.</p>
+        </div>
+        <div>
+          <div class="step-n">3</div>
+          <h3>Show your QR code</h3>
+          <p>Your approved pass has a QR code the conductor can scan to verify it.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap split">
+      <div>
+        <h3>Fares</h3>
+        <ul class="fare-list" id="fareList"></ul>
+      </div>
+      <div>
+        <h3>Routes</h3>
+        <ul class="route-list" id="routeList"></ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap">
+      <h2>Built to replace paper passes</h2>
+      <div class="feature-list">
+        <div><h3>Online application</h3><p>Apply for a new pass or a renewal from anywhere. No standing in queues.</p></div>
+        <div><h3>Live status tracking</h3><p>See whether your application is pending, approved or rejected, along with the fare and dates.</p></div>
+        <div><h3>QR-code verification</h3><p>Every approved pass gets a scannable QR code for instant checks.</p></div>
+        <div><h3>Expiry reminders</h3><p>Get notified before your pass runs out so you never miss a renewal.</p></div>
+        <div><h3>Admin dashboard</h3><p>Officials review, approve and reject applications from one screen.</p></div>
+        <div><h3>Multiple accounts</h3><p>Stay signed in to several accounts on one device and switch between them in a tap.</p></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<p class="footer">Bus Pass Management System &copy; 2026 &mdash; FYBSc AIML College Project</p>
+
+<script src="js/app.js"></script>
+<script>
+(function () {
+  initNavbar('home');
+
+  /* Fares and routes come from js/app.js so they are edited in one place */
+  document.getElementById('fareList').innerHTML = Object.keys(PASS_TYPES).map(function (name) {
+    const p = PASS_TYPES[name];
+    const perMonth = Math.round(p.price / (p.days / 30));
+    return '<li><span class="fare-name">' + name + '<span class="fare-note">' + p.days + ' days' +
+      (p.days > 30 ? ', about ₹' + perMonth + ' a month' : '') + '</span></span>' +
+      '<span class="fare-price">₹' + p.price.toLocaleString('en-IN') + '</span></li>';
+  }).join('');
+
+  document.getElementById('routeList').innerHTML = ROUTES.map(function (r) {
+    return '<li><span class="plate">' + r.no + '</span><span>' + r.from + ' to ' + r.to + '</span></li>';
+  }).join('');
+
+  /* The one piece of motion on this page: the board rolls through the routes */
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const roll = document.getElementById('roll');
+  let i = ROUTES.findIndex(function (r) { return r.no === '12'; });
+  setInterval(function () {
+    i = (i + 1) % ROUTES.length;
+    roll.classList.add('out');
+    setTimeout(function () {
+      const r = ROUTES[i];
+      document.getElementById('boardNo').textContent = r.no;
+      document.getElementById('boardDest').textContent = r.to;
+      document.getElementById('boardVia').textContent = 'from ' + r.from;
+      roll.classList.remove('out');
+      roll.classList.add('in');
+      setTimeout(function () { roll.classList.remove('in'); }, 320);
+    }, 300);
+  }, 3400);
+})();
+</script>
+</body>
+</html>

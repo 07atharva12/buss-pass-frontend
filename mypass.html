@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My pass - Smart Bus Pass</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Instrument+Sans:wght@400..700&display=swap">
+<link rel="stylesheet" href="css/style.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+</head>
+<body>
+
+<header id="topbar"></header>
+
+<main class="wrap page">
+  <div class="page-head">
+    <h1>My bus pass</h1>
+    <p>Show the QR code to the conductor so they can verify your pass.</p>
+  </div>
+
+  <div id="passArea"></div>
+</main>
+
+<script src="js/app.js"></script>
+<script>
+(function () {
+  const user = requireUser();
+  if (!user) return;
+  initNavbar('mypass');
+
+  const active = getUserApplications(user.email).filter(function (a) { return a.status === 'approved'; });
+  const area = document.getElementById('passArea');
+
+  if (active.length === 0) {
+    area.innerHTML = '<div class="card">' +
+      emptyState('ticket', 'You do not have an active pass right now.', 'apply.html', 'Apply for a pass') + '</div>';
+    return;
+  }
+
+  area.innerHTML = active.map(function (p, i) {
+    const left = daysLeft(p.expiryDate);
+    return '' +
+    '<article class="ticket">' +
+      '<div class="ticket-main">' +
+        '<div class="ticket-top">' +
+          '<span class="ticket-brand"><span class="brand-mark">' + icon('bus', 15) + '</span>Smart Bus Pass</span>' +
+          '<span class="badge badge-approved">Active</span>' +
+        '</div>' +
+        '<div class="ticket-route">' + plateHTML(p.route, true) + '<span class="route-name">' + esc(routeName(p.route)) + '</span></div>' +
+        '<dl class="kv">' +
+          '<div><dt>Passenger</dt><dd>' + esc(p.name) + '</dd></div>' +
+          '<div><dt>Pass type</dt><dd>' + esc(p.passType) + '</dd></div>' +
+          '<div><dt>Issued on</dt><dd>' + formatDate(p.approvedDate) + '</dd></div>' +
+          '<div><dt>Valid till</dt><dd>' + formatDate(p.expiryDate) + '</dd></div>' +
+        '</dl>' +
+        '<div class="meter-row">' +
+          '<div class="meter-label"><span>Time left</span><span>' + plural(left, 'day') + '</span></div>' +
+          '<div class="meter"><i style="width:' + validityPercent(p) + '%"></i></div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="ticket-stub">' +
+        '<div class="qr-box" id="qr-' + i + '"></div>' +
+        '<div class="pass-id">' + esc(p.id) + '</div>' +
+        '<div class="stub-note">Scan to verify</div>' +
+      '</div>' +
+    '</article>';
+  }).join('') +
+  '<div class="ticket-actions no-print"><button type="button" class="btn btn-outline btn-sm" id="printBtn">' + icon('printer', 16) + 'Print pass</button></div>';
+
+  document.getElementById('printBtn').addEventListener('click', function () { window.print(); });
+
+  // Encode pass details into the QR so it can be scanned and verified offline
+  active.forEach(function (p, i) {
+    const target = document.getElementById('qr-' + i);
+    if (typeof QRCode === 'undefined') {
+      target.textContent = 'QR unavailable offline';
+      return;
+    }
+    new QRCode(target, {
+      text: JSON.stringify({
+        passId: p.id, name: p.name, route: p.route, type: p.passType, validTill: p.expiryDate
+      }),
+      width: 160, height: 160,
+      colorDark: '#15171c', colorLight: '#ffffff'
+    });
+  });
+})();
+</script>
+</body>
+</html>
