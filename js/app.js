@@ -19,6 +19,7 @@ const MAX_ACCOUNTS = 5;
 /* The backend stores only the pass type, so how long a pass lasts is
    worked out here from the approval date. */
 const PASS_TYPES = {
+  daily:     { label: 'Daily',     days: 1 },
   monthly:   { label: 'Monthly',   days: 30 },
   quarterly: { label: 'Quarterly', days: 90 },
   yearly:    { label: 'Yearly',    days: 365 }
@@ -31,12 +32,16 @@ const TRIP_TYPES = {
 };
 
 /* Price from the pricing reply: pricing[passType][tripType].
-   Also accepts the older flat shape pricing[passType] so nothing breaks if the backend is rolled back. */
+   A flat number (no trip split) is NOT accepted, because it would show the same price for
+   one-way and round trip. The pages fall back to the plain route fare instead. */
 function priceFor(pricing, passType, tripType) {
   const v = pricing && passType ? pricing[passType] : null;
-  if (v == null) return null;
-  if (typeof v === 'object') return v[tripType] != null ? v[tripType] : null;
-  return v;
+  if (v && typeof v === 'object' && v[tripType] != null) return v[tripType];
+  return null;
+}
+/* Is this pricing reply split by trip type at all? */
+function isTripPricing(pricing) {
+  return !!pricing && Object.keys(pricing).some(function (k) { return pricing[k] && typeof pricing[k] === 'object'; });
 }
 
 /* ---------- Small helpers ---------- */

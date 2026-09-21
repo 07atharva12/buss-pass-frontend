@@ -74,7 +74,7 @@
     const p = PASS_TYPES[key];
     return '<label class="tile"><input type="radio" name="passType" value="' + key + '"' + (i === 0 ? ' required' : '') + '>' +
       '<span class="tile-body"><span class="tile-name">' + p.label + '</span>' +
-      '<span class="tile-price" data-price="' + key + '">' + p.days + ' days</span>' +
+      '<span class="tile-price" data-price="' + key + '">' + plural(p.days, 'day') + '</span>' +
       '<span class="tile-sub" data-sub="' + key + '">from approval</span></span></label>';
   }).join('');
 
@@ -106,8 +106,8 @@
     const trip = chosenTrip(), type = chosenType();
     Object.keys(PASS_TYPES).forEach(function (key) {
       const price = priceFor(pricing, key, trip);
-      document.querySelector('[data-price="' + key + '"]').textContent = price != null ? money(price) : PASS_TYPES[key].days + ' days';
-      document.querySelector('[data-sub="' + key + '"]').textContent = price != null ? PASS_TYPES[key].days + ' days' : 'from approval';
+      document.querySelector('[data-price="' + key + '"]').textContent = price != null ? money(price) : plural(PASS_TYPES[key].days, 'day');
+      document.querySelector('[data-sub="' + key + '"]').textContent = price != null ? plural(PASS_TYPES[key].days, 'day') : 'from approval';
     });
     Object.keys(TRIP_TYPES).forEach(function (key) {
       const price = priceFor(pricing, type, key);      // price of this trip type for the chosen pass type
@@ -125,7 +125,7 @@
     const trip = chosenTrip();
     document.getElementById('sumType').textContent = type ? PASS_TYPES[type].label : 'Not chosen';
     document.getElementById('sumTrip').textContent = TRIP_TYPES[trip].label;
-    document.getElementById('sumDays').textContent = type ? PASS_TYPES[type].days + ' days from approval' : '-';
+    document.getElementById('sumDays').textContent = type ? plural(PASS_TYPES[type].days, 'day') + ' from approval' : '-';
 
     // Amount: the price of the chosen pass type. If prices could not be loaded, fall back to the flat route fare.
     const label = document.getElementById('amountLabel');
@@ -154,6 +154,11 @@
       const d = await fetchPricing(r.id);
       if (request !== priceRequest) return;
       pricing = d.pricing || null;
+      if (pricing && !isTripPricing(pricing)) {
+        // The backend sent one price per pass type with no one-way / round-trip split
+        console.warn('Pricing reply is not split by trip type (expected pricing[pass_type][trip_type]):', d);
+        pricing = null;
+      }
     } catch (e) {
       if (request !== priceRequest) return;
       pricing = null;

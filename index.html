@@ -109,7 +109,7 @@
   document.getElementById('typeList').innerHTML = Object.keys(PASS_TYPES).map(function (key) {
     const p = PASS_TYPES[key];
     return '<li><span class="fare-name">' + p.label + '<span class="fare-note">Valid from the day it is approved</span></span>' +
-      '<span class="fare-price">' + p.days + ' days</span></li>';
+      '<span class="fare-price">' + plural(p.days, 'day') + '</span></li>';
   }).join('');
 
   /* Routes and fares come from the backend */
