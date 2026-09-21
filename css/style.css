@@ -262,6 +262,7 @@ button{font-family:inherit;}
 .tile-price{display:block;font:700 1.35rem var(--display);margin-top:2px;}
 .tile-sub{display:block;color:var(--muted);font-size:.8rem;}
 @media(max-width:520px){.tiles{grid-template-columns:1fr;}}
+.tiles.tiles-2{grid-template-columns:1fr 1fr;}
 
 /* ===== Buttons ===== */
 .btn{

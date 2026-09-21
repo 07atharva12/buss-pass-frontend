@@ -52,7 +52,7 @@
           '<div class="ticket-route">' + plateHTML(p.route, true) + '<span class="route-name">' + esc(routeName(p.route)) + '</span></div>' +
           '<dl class="kv">' +
             '<div><dt>Passenger</dt><dd>' + esc(user.name) + '</dd></div>' +
-            '<div><dt>Pass type</dt><dd>' + esc(p.typeLabel) + '</dd></div>' +
+            '<div><dt>Pass type</dt><dd>' + esc(p.typeLabel) + ' (' + esc(p.tripLabel) + ')</dd></div>' +
             '<div><dt>Issued on</dt><dd>' + formatDate(p.reviewed_on) + '</dd></div>' +
             '<div><dt>Valid till</dt><dd>' + formatDate(p.expiry) + '</dd></div>' +
           '</dl>' +

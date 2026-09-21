@@ -24,6 +24,21 @@ const PASS_TYPES = {
   yearly:    { label: 'Yearly',    days: 365 }
 };
 
+/* One-way or round trip. The backend prices round trip at exactly 2x one-way. */
+const TRIP_TYPES = {
+  one_way:    { label: 'One-way',    note: 'One direction' },
+  round_trip: { label: 'Round trip', note: 'Both directions' }
+};
+
+/* Price from the pricing reply: pricing[passType][tripType].
+   Also accepts the older flat shape pricing[passType] so nothing breaks if the backend is rolled back. */
+function priceFor(pricing, passType, tripType) {
+  const v = pricing && passType ? pricing[passType] : null;
+  if (v == null) return null;
+  if (typeof v === 'object') return v[tripType] != null ? v[tripType] : null;
+  return v;
+}
+
 /* ---------- Small helpers ---------- */
 function esc(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, c => (
@@ -310,6 +325,7 @@ function decorate(a) {
   const lapsed = a.status === 'approved' && expiry && expiry.getTime() < Date.now();
   return Object.assign({}, a, {
     typeLabel: info.label,
+    tripLabel: (TRIP_TYPES[a.trip_type] || TRIP_TYPES.one_way).label,   // older applications have no trip_type
     days: info.days,
     expiry: expiry,
     state: lapsed ? 'expired' : a.status,
@@ -331,8 +347,8 @@ async function fetchAllApplications() {
 }
 /* Price of each pass type for one route: { monthly, quarterly, yearly } (public endpoint) */
 function fetchPricing(routeId) { return api('/passes/pricing/' + routeId, { auth: false }); }
-function applyForPass(routeId, passType) {
-  return api('/passes/apply', { method: 'POST', body: { route_id: Number(routeId), pass_type: passType } });
+function applyForPass(routeId, passType, tripType) {
+  return api('/passes/apply', { method: 'POST', body: { route_id: Number(routeId), pass_type: passType, trip_type: tripType || 'one_way' } });
 }
 function renewPass(applicationId) {
   return api('/passes/renew/' + applicationId, { method: 'POST' });

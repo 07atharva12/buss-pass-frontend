@@ -56,7 +56,7 @@
         '<div class="peek on-dark">' +
           '<div class="peek-main">' + plateHTML(p.route, true) +
             '<div><div class="route-name">' + esc(routeName(p.route)) + '</div>' +
-            '<small>' + esc(p.typeLabel) + ' pass, valid till ' + formatDate(p.expiry) + '</small></div></div>' +
+            '<small>' + esc(p.typeLabel) + ' pass (' + esc(p.tripLabel) + '), valid till ' + formatDate(p.expiry) + '</small></div></div>' +
           '<div class="peek-meter"><div class="meter-label"><span>Time left</span><span>' + plural(daysLeft(p.expiry), 'day') + '</span></div>' +
             '<div class="meter on-dark-meter"><i style="width:' + validityPercent(p) + '%"></i></div></div>' +
           '<a class="btn btn-accent" href="mypass.html">Show my pass</a>' +
@@ -90,7 +90,7 @@
           return '<tr>' +
             '<td class="pass-id">' + esc(a.passId) + '</td>' +
             '<td><div class="cell-route">' + plateHTML(a.route) + '<span>' + esc(routeName(a.route)) + '</span></div></td>' +
-            '<td>' + esc(a.typeLabel) + '</td>' +
+            '<td>' + esc(a.typeLabel) + '<span class="sub-line">' + esc(a.tripLabel) + '</span></td>' +
             '<td>' + formatDate(a.applied_on) + '</td>' +
             '<td>' + badgeForStatus(a.state) + '</td>' +
           '</tr>';

@@ -104,7 +104,7 @@
             '<td class="pass-id">' + esc(a.passId) + '</td>' +
             '<td>' + esc(applicantName(a)) + (a.user_email ? '<span class="sub-line">' + esc(a.user_email) + '</span>' : '') + '</td>' +
             '<td><div class="cell-route">' + plateHTML(a.route) + '<span>' + esc(routeName(a.route)) + '</span></div></td>' +
-            '<td>' + esc(a.typeLabel) + '</td>' +
+            '<td>' + esc(a.typeLabel) + '<span class="sub-line">' + esc(a.tripLabel) + '</span></td>' +
             '<td>' + formatDate(a.applied_on) + '</td>' +
             '<td>' + badgeForStatus(a.state) + '</td>' +
             '<td>' + (a.status === 'pending'

@@ -32,6 +32,11 @@
         <div class="tiles" id="passTiles" role="radiogroup" aria-labelledby="typeLabel"></div>
       </div>
 
+      <div class="field">
+        <span class="label" id="tripLabel">Trip type</span>
+        <div class="tiles tiles-2" id="tripTiles" role="radiogroup" aria-labelledby="tripLabel"></div>
+      </div>
+
       <div class="error-text" id="applyError" role="alert" style="margin-bottom:14px;"></div>
       <button type="submit" class="btn btn-primary btn-block" id="submitBtn">Submit application</button>
     </form>
@@ -44,6 +49,7 @@
       </div>
       <dl>
         <div><dt>Pass type</dt><dd id="sumType">Not chosen</dd></div>
+        <div><dt>Trip</dt><dd id="sumTrip">One-way</dd></div>
         <div><dt>Valid for</dt><dd id="sumDays">-</dd></div>
       </dl>
       <div class="total"><span id="amountLabel">Route fare</span><b id="amountPreview">₹0</b></div>
@@ -72,6 +78,18 @@
       '<span class="tile-sub" data-sub="' + key + '">from approval</span></span></label>';
   }).join('');
 
+  /* Trip type tiles: One-way is selected by default (the backend default as well) */
+  document.getElementById('tripTiles').innerHTML = Object.keys(TRIP_TYPES).map(function (key, i) {
+    return '<label class="tile"><input type="radio" name="tripType" value="' + key + '"' + (i === 0 ? ' checked' : '') + '>' +
+      '<span class="tile-body"><span class="tile-name">' + TRIP_TYPES[key].label + '</span>' +
+      '<span class="tile-price" data-trip-price="' + key + '">&nbsp;</span>' +
+      '<span class="tile-sub">' + TRIP_TYPES[key].note + '</span></span></label>';
+  }).join('');
+
+  function chosenTrip() {
+    const el = document.querySelector('input[name="tripType"]:checked');
+    return el ? el.value : 'one_way';
+  }
   function chosenType() {
     const el = document.querySelector('input[name="passType"]:checked');
     return el ? el.value : '';
@@ -85,10 +103,15 @@
 
   /* Tiles show each type's price once it is known, otherwise how long it lasts */
   function updateTiles() {
+    const trip = chosenTrip(), type = chosenType();
     Object.keys(PASS_TYPES).forEach(function (key) {
-      const has = pricing && pricing[key] != null;
-      document.querySelector('[data-price="' + key + '"]').textContent = has ? money(pricing[key]) : PASS_TYPES[key].days + ' days';
-      document.querySelector('[data-sub="' + key + '"]').textContent = has ? PASS_TYPES[key].days + ' days' : 'from approval';
+      const price = priceFor(pricing, key, trip);
+      document.querySelector('[data-price="' + key + '"]').textContent = price != null ? money(price) : PASS_TYPES[key].days + ' days';
+      document.querySelector('[data-sub="' + key + '"]').textContent = price != null ? PASS_TYPES[key].days + ' days' : 'from approval';
+    });
+    Object.keys(TRIP_TYPES).forEach(function (key) {
+      const price = priceFor(pricing, type, key);      // price of this trip type for the chosen pass type
+      document.querySelector('[data-trip-price="' + key + '"]').textContent = price != null ? money(price) : '\u00a0';
     });
   }
 
@@ -99,7 +122,9 @@
     plate.textContent = r ? r.route_number : '--';
     plate.style.opacity = r ? '1' : '.35';
     document.getElementById('sumRoute').textContent = r ? routeName(r) : 'Choose a route';
+    const trip = chosenTrip();
     document.getElementById('sumType').textContent = type ? PASS_TYPES[type].label : 'Not chosen';
+    document.getElementById('sumTrip').textContent = TRIP_TYPES[trip].label;
     document.getElementById('sumDays').textContent = type ? PASS_TYPES[type].days + ' days from approval' : '-';
 
     // Amount: the price of the chosen pass type. If prices could not be loaded, fall back to the flat route fare.
@@ -108,8 +133,13 @@
     if (loadingPrice) { label.textContent = 'Amount payable'; amount.textContent = '...'; }
     else if (pricing) {
       label.textContent = 'Amount payable';
-      amount.textContent = type && pricing[type] != null ? money(pricing[type]) : '-';
-    } else { label.textContent = 'Route fare'; amount.textContent = money(r ? r.fare : 0); }
+      const price = priceFor(pricing, type, trip);
+      amount.textContent = price != null ? money(price) : '-';
+    } else {
+      // No prices available: show the flat route fare (round trip is exactly double)
+      label.textContent = 'Route fare';
+      amount.textContent = money(r ? r.fare * (trip === 'round_trip' ? 2 : 1) : 0);
+    }
   }
 
   routeSel.addEventListener('change', async function () {
@@ -132,7 +162,9 @@
     updateTiles();
     updateSummary();
   });
-  document.getElementById('passTiles').addEventListener('change', updateSummary);
+  function onChoiceChange() { updateTiles(); updateSummary(); }
+  document.getElementById('passTiles').addEventListener('change', onChoiceChange);
+  document.getElementById('tripTiles').addEventListener('change', onChoiceChange);
 
   async function loadRoutes() {
     try {
@@ -162,7 +194,7 @@
 
     setBusy(btn, true, 'Submitting...');
     try {
-      const res = await applyForPass(routeSel.value, type);
+      const res = await applyForPass(routeSel.value, type, chosenTrip());
       const id = 'BP-' + String(res.application.id).padStart(4, '0');
       showToast('Application submitted. Your ID is ' + id + '.');
       setTimeout(function () { window.location.href = 'track.html'; }, 1000);
