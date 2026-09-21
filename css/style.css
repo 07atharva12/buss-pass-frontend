@@ -559,3 +559,19 @@ tbody tr:hover td{background:#fafaf7;}
 .verify dl{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:26px;text-align:left;padding-top:22px;border-top:2px dashed var(--line);}
 .verify dt{color:var(--muted);font-size:.82rem;}
 .verify dd{font-weight:600;margin-top:2px;}
+
+/* ===== Reject dialog (admin) and rejection reason ===== */
+.btn-bad{background:var(--bad);color:#fff;}
+.btn-bad:hover{filter:brightness(1.1);}
+.dialog{
+  margin:auto;border:0;border-radius:var(--r-card);padding:0;max-width:440px;width:calc(100% - 32px);
+  box-shadow:0 30px 60px -20px rgba(13,14,16,.55);color:var(--ink);
+}
+.dialog::backdrop{background:rgba(13,14,16,.55);}
+.dialog-body{padding:26px 26px 22px;}
+.dialog h2{font-size:1.3rem;font-weight:700;}
+.dialog-sub{color:var(--muted);margin:6px 0 20px;font-size:.93rem;}
+.dialog-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:8px;}
+.reason{
+  margin-top:16px;padding:12px 14px;border-radius:10px;background:var(--bad-bg);color:var(--bad);font-size:.93rem;
+}

@@ -87,6 +87,7 @@
           '<div><dt>Applied on</dt><dd>' + formatDate(a.applied_on) + '</dd></div>' +
           '<div><dt>' + dateLabel + '</dt><dd>' + dateValue + '</dd></div>' +
         '</dl>' +
+        (isRejected && a.rejection_reason ? '<div class="reason"><b>Why it was rejected:</b> ' + esc(a.rejection_reason) + '</div>' : '') +
         stepper(a.state) +
       '</article>';
     }).join('');

@@ -52,7 +52,7 @@
         '<dl>' +
           '<div><dt>Pass ID</dt><dd class="pass-id">' + esc(passId) + '</dd></div>' +
           '<div><dt>Route</dt><dd>' + (d.route ? '<span class="plate">' + esc(d.route) + '</span>' : '-') + '</dd></div>' +
-          '<div><dt>Pass type</dt><dd>' + esc(cap(d.pass_type)) + '</dd></div>' +
+          '<div><dt>Pass type</dt><dd>' + esc(cap(d.pass_type)) + (d.trip_type ? ' (' + esc((TRIP_TYPES[d.trip_type] || { label: d.trip_type }).label) + ')' : '') + '</dd></div>' +
           '<div><dt>Status</dt><dd>' + badgeForStatus(d.status) + '</dd></div>' +
         '</dl>';
       if (d.valid) show(true, 'Valid pass', 'This pass is approved.', details);

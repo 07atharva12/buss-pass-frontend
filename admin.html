@@ -55,6 +55,22 @@
   </section>
 </main>
 
+<dialog id="rejectDialog" class="dialog" aria-labelledby="rejectTitle">
+  <div class="dialog-body">
+    <h2 id="rejectTitle">Reject application</h2>
+    <p class="dialog-sub" id="rejectSub"></p>
+    <div class="field">
+      <label for="rejectReason">Reason</label>
+      <select id="rejectReason"></select>
+      <div class="error-text" id="rejectError" role="alert"></div>
+    </div>
+    <div class="dialog-actions">
+      <button type="button" class="btn btn-ghost" id="rejectCancel">Cancel</button>
+      <button type="button" class="btn btn-bad" id="rejectConfirm">Reject application</button>
+    </div>
+  </div>
+</dialog>
+
 <script src="js/app.js"></script>
 <script>
 (function () {
@@ -106,7 +122,7 @@
             '<td><div class="cell-route">' + plateHTML(a.route) + '<span>' + esc(routeName(a.route)) + '</span></div></td>' +
             '<td>' + esc(a.typeLabel) + '<span class="sub-line">' + esc(a.tripLabel) + '</span></td>' +
             '<td>' + formatDate(a.applied_on) + '</td>' +
-            '<td>' + badgeForStatus(a.state) + '</td>' +
+            '<td>' + badgeForStatus(a.state) + (a.rejection_reason ? '<span class="sub-line">' + esc(a.rejection_reason) + '</span>' : '') + '</td>' +
             '<td>' + (a.status === 'pending'
               ? '<div class="flex gap-10">' +
                   '<button type="button" class="btn btn-success btn-sm" data-act="approve" data-id="' + a.id + '">Approve</button>' +
@@ -124,9 +140,51 @@
     catch (e) { document.getElementById('adminStats').innerHTML = ''; showError(table, e, load); }
   }
 
+  /* Rejecting asks for a reason first */
+  const dlg = document.getElementById('rejectDialog');
+  const reasonSel = document.getElementById('rejectReason');
+  const reasonErr = document.getElementById('rejectError');
+  const confirmBtn = document.getElementById('rejectConfirm');
+  let rejectId = null;
+  reasonSel.innerHTML = '<option value="">Choose a reason</option>' +
+    REJECTION_REASONS.map(function (r) { return '<option value="' + esc(r) + '">' + esc(r) + '</option>'; }).join('');
+
+  function openReject(id) {
+    rejectId = id;
+    const a = all.find(function (x) { return String(x.id) === String(id); });
+    document.getElementById('rejectSub').textContent = a ? a.passId + ', ' + routeName(a.route) + ' (' + applicantName(a) + ')' : '';
+    reasonSel.value = '';
+    reasonErr.style.display = 'none';
+    dlg.showModal();
+    reasonSel.focus();
+  }
+  document.getElementById('rejectCancel').addEventListener('click', function () { dlg.close(); });
+  dlg.addEventListener('click', function (e) { if (e.target === dlg) dlg.close(); });   // click on the dark backdrop
+  confirmBtn.addEventListener('click', async function () {
+    if (!reasonSel.value) {
+      reasonErr.textContent = 'Choose a reason.';
+      reasonErr.style.display = 'block';
+      return;
+    }
+    setBusy(confirmBtn, true, 'Rejecting...');
+    try {
+      await setApplicationStatus(rejectId, 'reject', reasonSel.value);
+      setBusy(confirmBtn, false);
+      dlg.close();
+      showToast('Application rejected.', true);
+      load();
+    } catch (err) {
+      setBusy(confirmBtn, false);
+      if (err.silent) return;
+      reasonErr.textContent = err.message;
+      reasonErr.style.display = 'block';
+    }
+  });
+
   table.addEventListener('click', async function (e) {
     const btn = e.target.closest('button[data-act]');
     if (!btn) return;
+    if (btn.dataset.act === 'reject') { openReject(btn.dataset.id); return; }
     const row = btn.closest('tr');
     row.querySelectorAll('button').forEach(function (b) { b.disabled = true; });
     try {

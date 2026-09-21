@@ -31,6 +31,15 @@ const TRIP_TYPES = {
   round_trip: { label: 'Round trip', note: 'Both directions' }
 };
 
+/* Reasons an admin can pick when rejecting. The backend only accepts these exact texts. */
+const REJECTION_REASONS = [
+  'Duplicate application',
+  'Route unavailable',
+  'Invalid information provided',
+  'Pass type not permitted for this route',
+  'Other'
+];
+
 /* Price from the pricing reply: pricing[passType][tripType].
    A flat number (no trip split) is NOT accepted, because it would show the same price for
    one-way and round trip. The pages fall back to the plain route fare instead. */
@@ -358,8 +367,11 @@ function applyForPass(routeId, passType, tripType) {
 function renewPass(applicationId) {
   return api('/passes/renew/' + applicationId, { method: 'POST' });
 }
-function setApplicationStatus(applicationId, action) {            // action: 'approve' | 'reject'
-  return api('/admin/applications/' + applicationId + '/' + action, { method: 'PUT' });
+function setApplicationStatus(applicationId, action, reason) {    // action: 'approve' | 'reject' (reject sends a reason)
+  return api('/admin/applications/' + applicationId + '/' + action, {
+    method: 'PUT',
+    body: action === 'reject' && reason ? { reason: reason } : undefined
+  });
 }
 function addRoute(route) {
   return api('/admin/routes', { method: 'POST', body: route });
