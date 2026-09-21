@@ -32,7 +32,11 @@ function esc(s) {
 }
 function plural(n, word) { return n + ' ' + word + (n === 1 ? '' : 's'); }
 function cap(s) { s = String(s || ''); return s.charAt(0).toUpperCase() + s.slice(1); }
-function money(n) { return '₹' + Number(n || 0).toLocaleString('en-IN'); }
+function money(n) {
+  n = Number(n || 0);
+  // whole rupees show as 600, fares with paise show as 121.62
+  return '₹' + n.toLocaleString('en-IN', { minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 });
+}
 
 /* The API sends UTC times without a "Z" (e.g. 2026-09-20T10:00:00.123456).
    Without the Z the browser would read them as local time, so add it. */
@@ -325,6 +329,8 @@ async function fetchAllApplications() {
   const d = await api('/admin/applications');
   return (d.applications || []).map(decorate);
 }
+/* Price of each pass type for one route: { monthly, quarterly, yearly } (public endpoint) */
+function fetchPricing(routeId) { return api('/passes/pricing/' + routeId, { auth: false }); }
 function applyForPass(routeId, passType) {
   return api('/passes/apply', { method: 'POST', body: { route_id: Number(routeId), pass_type: passType } });
 }

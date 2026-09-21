@@ -80,7 +80,10 @@
         '</div>' +
         '<dl class="kv">' +
           '<div><dt>Pass type</dt><dd>' + esc(a.typeLabel) + '</dd></div>' +
-          '<div><dt>Route fare</dt><dd>' + (a.route ? money(a.route.fare) : '-') + '</dd></div>' +
+          // the backend now stores the amount for each application; older ones fall back to the route fare
+          (a.amount != null
+            ? '<div><dt>Amount</dt><dd>' + money(a.amount) + '</dd></div>'
+            : '<div><dt>Route fare</dt><dd>' + (a.route ? money(a.route.fare) : '-') + '</dd></div>') +
           '<div><dt>Applied on</dt><dd>' + formatDate(a.applied_on) + '</dd></div>' +
           '<div><dt>' + dateLabel + '</dt><dd>' + dateValue + '</dd></div>' +
         '</dl>' +

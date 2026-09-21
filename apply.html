@@ -46,7 +46,7 @@
         <div><dt>Pass type</dt><dd id="sumType">Not chosen</dd></div>
         <div><dt>Valid for</dt><dd id="sumDays">-</dd></div>
       </dl>
-      <div class="total"><span>Route fare</span><b id="amountPreview">₹0</b></div>
+      <div class="total"><span id="amountLabel">Route fare</span><b id="amountPreview">₹0</b></div>
     </aside>
   </div>
 </main>
@@ -68,8 +68,8 @@
     const p = PASS_TYPES[key];
     return '<label class="tile"><input type="radio" name="passType" value="' + key + '"' + (i === 0 ? ' required' : '') + '>' +
       '<span class="tile-body"><span class="tile-name">' + p.label + '</span>' +
-      '<span class="tile-price">' + p.days + ' days</span>' +
-      '<span class="tile-sub">from approval</span></span></label>';
+      '<span class="tile-price" data-price="' + key + '">' + p.days + ' days</span>' +
+      '<span class="tile-sub" data-sub="' + key + '">from approval</span></span></label>';
   }).join('');
 
   function chosenType() {
@@ -78,6 +78,18 @@
   }
   function chosenRoute() {
     return routes.find(function (r) { return String(r.id) === routeSel.value; }) || null;
+  }
+
+  /* Prices for the chosen route: { monthly, quarterly, yearly }, or null until they load */
+  let pricing = null, loadingPrice = false, priceRequest = 0;
+
+  /* Tiles show each type's price once it is known, otherwise how long it lasts */
+  function updateTiles() {
+    Object.keys(PASS_TYPES).forEach(function (key) {
+      const has = pricing && pricing[key] != null;
+      document.querySelector('[data-price="' + key + '"]').textContent = has ? money(pricing[key]) : PASS_TYPES[key].days + ' days';
+      document.querySelector('[data-sub="' + key + '"]').textContent = has ? PASS_TYPES[key].days + ' days' : 'from approval';
+    });
   }
 
   function updateSummary() {
@@ -89,9 +101,37 @@
     document.getElementById('sumRoute').textContent = r ? routeName(r) : 'Choose a route';
     document.getElementById('sumType').textContent = type ? PASS_TYPES[type].label : 'Not chosen';
     document.getElementById('sumDays').textContent = type ? PASS_TYPES[type].days + ' days from approval' : '-';
-    document.getElementById('amountPreview').textContent = money(r ? r.fare : 0);
+
+    // Amount: the price of the chosen pass type. If prices could not be loaded, fall back to the flat route fare.
+    const label = document.getElementById('amountLabel');
+    const amount = document.getElementById('amountPreview');
+    if (loadingPrice) { label.textContent = 'Amount payable'; amount.textContent = '...'; }
+    else if (pricing) {
+      label.textContent = 'Amount payable';
+      amount.textContent = type && pricing[type] != null ? money(pricing[type]) : '-';
+    } else { label.textContent = 'Route fare'; amount.textContent = money(r ? r.fare : 0); }
   }
-  routeSel.addEventListener('change', updateSummary);
+
+  routeSel.addEventListener('change', async function () {
+    pricing = null;
+    updateTiles();
+    const r = chosenRoute();
+    if (!r) { loadingPrice = false; updateSummary(); return; }
+    const request = ++priceRequest;              // ignore answers for a route the person already left
+    loadingPrice = true;
+    updateSummary();
+    try {
+      const d = await fetchPricing(r.id);
+      if (request !== priceRequest) return;
+      pricing = d.pricing || null;
+    } catch (e) {
+      if (request !== priceRequest) return;
+      pricing = null;
+    }
+    loadingPrice = false;
+    updateTiles();
+    updateSummary();
+  });
   document.getElementById('passTiles').addEventListener('change', updateSummary);
 
   async function loadRoutes() {
