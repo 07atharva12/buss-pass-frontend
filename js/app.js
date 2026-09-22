@@ -61,6 +61,11 @@ function esc(s) {
 }
 function plural(n, word) { return n + ' ' + word + (n === 1 ? '' : 's'); }
 function cap(s) { s = String(s || ''); return s.charAt(0).toUpperCase() + s.slice(1); }
+/* Shows only the last 4 digits of an Aadhar number: XXXX XXXX 1234 */
+function maskAadhar(v) {
+  v = String(v || '').replace(/\D/g, '');
+  return v.length === 12 ? 'XXXX XXXX ' + v.slice(-4) : v;
+}
 function money(n) {
   n = Number(n || 0);
   // whole rupees show as 600, fares with paise show as 121.62
@@ -361,8 +366,14 @@ async function fetchAllApplications() {
 }
 /* Price of each pass type for one route: { monthly, quarterly, yearly } (public endpoint) */
 function fetchPricing(routeId) { return api('/passes/pricing/' + routeId, { auth: false }); }
-function applyForPass(routeId, passType, tripType) {
-  return api('/passes/apply', { method: 'POST', body: { route_id: Number(routeId), pass_type: passType, trip_type: tripType || 'one_way' } });
+function applyForPass(routeId, passType, tripType, applicantDetails) {
+  return api('/passes/apply', {
+    method: 'POST',
+    body: Object.assign(
+      { route_id: Number(routeId), pass_type: passType, trip_type: tripType || 'one_way' },
+      applicantDetails || {}
+    )
+  });
 }
 function renewPass(applicationId) {
   return api('/passes/renew/' + applicationId, { method: 'POST' });

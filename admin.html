@@ -118,7 +118,12 @@
         filtered.map(function (a) {
           return '<tr>' +
             '<td class="pass-id">' + esc(a.passId) + '</td>' +
-            '<td>' + esc(applicantName(a)) + (a.user_email ? '<span class="sub-line">' + esc(a.user_email) + '</span>' : '') + '</td>' +
+            '<td>' + esc(applicantName(a)) +
+              (a.user_email ? '<span class="sub-line">' + esc(a.user_email) + '</span>' : '') +
+              (a.applicant_age != null ? '<span class="sub-line">Age ' + esc(a.applicant_age) + '</span>' : '') +
+              (a.applicant_mobile ? '<span class="sub-line">' + esc(a.applicant_mobile) + '</span>' : '') +
+              (a.aadhar_number ? '<span class="sub-line">Aadhar ' + esc(maskAadhar(a.aadhar_number)) + '</span>' : '') +
+            '</td>' +
             '<td><div class="cell-route">' + plateHTML(a.route) + '<span>' + esc(routeName(a.route)) + '</span></div></td>' +
             '<td>' + esc(a.typeLabel) + '<span class="sub-line">' + esc(a.tripLabel) + '</span></td>' +
             '<td>' + formatDate(a.applied_on) + '</td>' +

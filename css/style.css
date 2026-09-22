@@ -575,3 +575,6 @@ tbody tr:hover td{background:#fafaf7;}
 .reason{
   margin-top:16px;padding:12px 14px;border-radius:10px;background:var(--bad-bg);color:var(--bad);font-size:.93rem;
 }
+
+/* ===== Optional applicant details (Apply form) ===== */
+.optional-tag{font-weight:500;color:var(--muted);font-size:.85rem;}

@@ -37,6 +37,25 @@
         <div class="tiles tiles-2" id="tripTiles" role="radiogroup" aria-labelledby="tripLabel"></div>
       </div>
 
+      <div class="field">
+        <label for="applicantAge">Age <span class="optional-tag">(optional)</span></label>
+        <input type="number" id="applicantAge" min="5" max="100" placeholder="e.g. 21">
+        <div class="error-text" id="ageError" role="alert"></div>
+      </div>
+
+      <div class="field">
+        <label for="applicantMobile">Mobile number <span class="optional-tag">(optional)</span></label>
+        <input type="tel" id="applicantMobile" inputmode="numeric" maxlength="10" placeholder="10-digit mobile number">
+        <div class="error-text" id="mobileError" role="alert"></div>
+      </div>
+
+      <div class="field">
+        <label for="aadharNumber">Aadhar number <span class="optional-tag">(optional)</span></label>
+        <input type="text" id="aadharNumber" inputmode="numeric" maxlength="12" placeholder="12-digit Aadhar number" autocomplete="off">
+        <div class="form-hint">Used only to verify your identity. Not shown to other users.</div>
+        <div class="error-text" id="aadharError" role="alert"></div>
+      </div>
+
       <div class="error-text" id="applyError" role="alert" style="margin-bottom:14px;"></div>
       <button type="submit" class="btn btn-primary btn-block" id="submitBtn">Submit application</button>
     </form>
@@ -142,6 +161,13 @@
     }
   }
 
+  // Keep these fields digits-only as the person types
+  ['applicantMobile', 'aadharNumber'].forEach(function (id) {
+    document.getElementById(id).addEventListener('input', function () {
+      this.value = this.value.replace(/\D/g, '');
+    });
+  });
+
   routeSel.addEventListener('change', async function () {
     pricing = null;
     updateTiles();
@@ -194,12 +220,42 @@
     e.preventDefault();
     errorBox.style.display = 'none';
     const type = chosenType();
+    ['ageError', 'mobileError', 'aadharError'].forEach(function (id) {
+      document.getElementById(id).style.display = 'none';
+    });
     if (!routeSel.value) { errorBox.textContent = 'Choose a route.'; errorBox.style.display = 'block'; return; }
     if (!type) { errorBox.textContent = 'Choose a pass type.'; errorBox.style.display = 'block'; return; }
 
+    // These three are optional, but checked if filled in, matching the backend's rules
+    const ageVal = document.getElementById('applicantAge').value.trim();
+    const mobileVal = document.getElementById('applicantMobile').value.trim();
+    const aadharVal = document.getElementById('aadharNumber').value.trim();
+    let hasFieldError = false;
+    if (ageVal && (Number(ageVal) < 5 || Number(ageVal) > 100)) {
+      document.getElementById('ageError').textContent = 'Age must be between 5 and 100.';
+      document.getElementById('ageError').style.display = 'block';
+      hasFieldError = true;
+    }
+    if (mobileVal && !/^\d{10}$/.test(mobileVal)) {
+      document.getElementById('mobileError').textContent = 'Mobile number must be exactly 10 digits.';
+      document.getElementById('mobileError').style.display = 'block';
+      hasFieldError = true;
+    }
+    if (aadharVal && !/^\d{12}$/.test(aadharVal)) {
+      document.getElementById('aadharError').textContent = 'Aadhar number must be exactly 12 digits.';
+      document.getElementById('aadharError').style.display = 'block';
+      hasFieldError = true;
+    }
+    if (hasFieldError) return;
+
+    const applicantDetails = {};
+    if (ageVal) applicantDetails.applicant_age = Number(ageVal);
+    if (mobileVal) applicantDetails.applicant_mobile = mobileVal;
+    if (aadharVal) applicantDetails.aadhar_number = aadharVal;
+
     setBusy(btn, true, 'Submitting...');
     try {
-      const res = await applyForPass(routeSel.value, type, chosenTrip());
+      const res = await applyForPass(routeSel.value, type, chosenTrip(), applicantDetails);
       const id = 'BP-' + String(res.application.id).padStart(4, '0');
       showToast('Application submitted. Your ID is ' + id + '.');
       setTimeout(function () { window.location.href = 'track.html'; }, 1000);
